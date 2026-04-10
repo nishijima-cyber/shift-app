@@ -791,62 +791,105 @@ function generateShifts(){
   if(!avails.length){alert('この月の出勤希望が登録されていません');return}
   if(!confirm(`${genY}年${genM}月のシフトを自動作成します。\n既存のシフトは上書きされます。\nよろしいですか？`)) return;
 
-  // Remove existing shifts for this month
   let allShifts=DB.get('shifts').filter(s=>!s.date.startsWith(prefix));
 
-  // Monthly hour tracker
+  // 月次時間トラッカー
   const hoursUsed={};
-  staffs.forEach(s=>hoursUsed[s.id]=0);
+  // 週次時間トラッカー {staffId: {weekKey: hours}}
+  const weeklyHours={};
+  // 出勤日セット {staffId: Set<date>}
+  const workingDates={};
+
+  staffs.forEach(s=>{
+    hoursUsed[s.id]=0;
+    weeklyHours[s.id]={};
+    workingDates[s.id]=new Set();
+  });
+
+  // 月上限（アルバイトは設定値と85hの小さい方）
+  function monthLimit(staff){
+    return staff.type==='parttime'?Math.min(staff.monthlyHourLimit,85):staff.monthlyHourLimit;
+  }
+
+  // その日までの連続出勤日数（d日の前日まで）
+  function getConsecutive(staffId,d){
+    let count=0;
+    for(let i=d-1;i>=1;i--){
+      if(workingDates[staffId].has(ds(genY,genM,i))) count++;
+      else break;
+    }
+    return count;
+  }
+
+  // 週キー（月曜起点）
+  function weekKey(d){
+    const date=new Date(genY,genM-1,d);
+    const dow=date.getDay(); // 0=Sun
+    const monday=new Date(date);
+    monday.setDate(d-(dow===0?6:dow-1));
+    return monday.toISOString().slice(0,10);
+  }
 
   const newShifts=[];
   const days=daysInMonth(genY,genM);
 
   for(let d=1;d<=days;d++){
     const date=ds(genY,genM,d);
+    const wk=weekKey(d);
     const dayAvails=avails.filter(a=>a.date===date);
     if(!dayAvails.length) continue;
+
+    const workedToday=new Set();
 
     for(const store of stores){
       const stOpen=toMins(store.openTime);
       const stClose=toMins(store.closeTime);
 
-      // Get candidates: staff assigned to this store with availability today
       const candidates=dayAvails
         .map(a=>{
           const staff=staffs.find(s=>s.id===a.staffId);
           if(!staff) return null;
           if(!(staff.assignedStores||[]).includes(store.id)) return null;
-          // Clip to store hours
           const start=Math.max(toMins(a.startTime),stOpen);
           const end=Math.min(toMins(a.endTime),stClose);
           const hours=(end-start)/60;
           if(hours<=0) return null;
-          return{staffId:staff.id,staff,start,end,hours,origStart:toMins(a.startTime),origEnd:toMins(a.endTime)};
+          return{staffId:staff.id,staff,start,end,hours};
         })
         .filter(Boolean)
         .sort((a,b)=>a.start-b.start);
 
       if(!candidates.length) continue;
 
-      // Greedy interval cover: cover [stOpen, stClose]
       let covered=stOpen;
       const used=new Set();
 
-      // Safety: max 3 passes to handle overlapping coverage
       for(let pass=0;pass<candidates.length;pass++){
         if(covered>=stClose) break;
 
-        // Find best: starts at or before covered+slack, extends furthest, within limit
         const eligible=candidates.filter(c=>{
           if(used.has(c.staffId)) return false;
-          const remaining=c.staff.monthlyHourLimit-hoursUsed[c.staffId];
+
+          // ① 月上限チェック
+          const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
           if(c.hours>remaining+0.01) return false;
-          return c.start<=covered+60; // allow up to 60min gap (flexible)
+
+          // ② 4連勤禁止（今日まだ出勤していない場合のみチェック）
+          if(!workedToday.has(c.staffId)){
+            if(getConsecutive(c.staffId,d)>=3) return false;
+          }
+
+          // ③ アルバイト：週20h以内
+          if(c.staff.type==='parttime'){
+            const wkUsed=weeklyHours[c.staffId][wk]||0;
+            if(wkUsed+c.hours>20+0.01) return false;
+          }
+
+          return c.start<=covered+60;
         });
 
         if(!eligible.length) break;
 
-        // Pick the one that covers furthest
         eligible.sort((a,b)=>b.end-a.end);
         const chosen=eligible[0];
 
@@ -860,26 +903,30 @@ function generateShifts(){
         });
 
         hoursUsed[chosen.staffId]+=chosen.hours;
+        weeklyHours[chosen.staffId][wk]=(weeklyHours[chosen.staffId][wk]||0)+chosen.hours;
+        workedToday.add(chosen.staffId);
         used.add(chosen.staffId);
         covered=Math.max(covered,chosen.end);
       }
     }
+
+    workedToday.forEach(sid=>workingDates[sid].add(date));
   }
 
   allShifts=allShifts.concat(newShifts);
   DB.set('shifts',allShifts);
 
-  // Summary
   const summaryItems=staffs
     .map(s=>({s,h:hoursUsed[s.id]||0}))
     .filter(x=>x.h>0)
     .map(({s,h})=>{
-      const pct=Math.min(100,Math.round(h/s.monthlyHourLimit*100));
+      const lim=monthLimit(s);
+      const pct=Math.min(100,Math.round(h/lim*100));
       const cls=pct>=90?'danger':pct>=70?'warn':'';
       return `<div style="margin-bottom:10px;">
         <div class="flex-between text-sm mb2">
           <span>${s.name} ${typeBadge(s.type)}</span>
-          <span>${h.toFixed(1)}h / ${s.monthlyHourLimit}h</span>
+          <span>${h.toFixed(1)}h / ${lim}h</span>
         </div>
         <div class="progress"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>
       </div>`;
@@ -889,6 +936,7 @@ function generateShifts(){
     <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:16px;">
       <div class="text-success fw6">✓ シフトを作成しました</div>
       <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
+      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内</div>
     </div>
     ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
   `;
