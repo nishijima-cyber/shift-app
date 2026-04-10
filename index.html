@@ -416,7 +416,7 @@ tr:last-child td{border-bottom:none}
             <div style="background:var(--gray-50);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem;">
               <ul style="padding-left:1.2em;line-height:2.2;">
                 <li><strong>社員優先</strong>：各店舗の「必要社員数」を先に埋め、不足分をアルバイト・パートで補います</li>
-                <li><strong>4連勤禁止</strong>：3日連続出勤の翌日は自動でスキップ（最低2人確保時は一時緩和）</li>
+                <li><strong>5連勤禁止</strong>：4日連続出勤の翌日は自動でスキップ（最低2人確保時は一時緩和）</li>
                 <li><strong>月上限厳守</strong>：各スタッフの月上限時間を超えません</li>
                 <li><strong>アルバイト週20h以内</strong>：月曜〜日曜で20時間を超えないよう調整</li>
                 <li><strong>アルバイト月85h以内</strong>：設定値と85hの小さい方が上限</li>
@@ -1184,14 +1184,14 @@ function generateShifts(){
       let empAssignedCount=0;
       const overflowToday=[];
 
-      // 配置可否チェック（relaxConsecutive=true で4連勤チェックを緩和）
+      // 配置可否チェック（relaxConsecutive=true で5連勤チェックを緩和）
       function tryAssign(c, relaxConsecutive){
         if(used.has(c.staffId)) return false;
         if(assignedCount>=maxStaff) return false;
         const rem=monthLimit(c.staff)-hoursUsed[c.staffId];
         if(c.hours>rem+0.01) return false;
         if(!relaxConsecutive&&!workedToday.has(c.staffId)){
-          if(getConsecutive(c.staffId,d)>=3) return false;
+          if(getConsecutive(c.staffId,d)>=4) return false;
         }
         if(c.staff.type==='parttime'){
           const wkUsed=weeklyHours[c.staffId][wk]||0;
@@ -1236,7 +1236,7 @@ function generateShifts(){
         if(used.has(c.staffId)) continue;
         let reason='';
         if(assignedCount>=maxStaff) reason='上限人数超過';
-        else if(!workedToday.has(c.staffId)&&getConsecutive(c.staffId,d)>=3) reason='4連勤回避';
+        else if(!workedToday.has(c.staffId)&&getConsecutive(c.staffId,d)>=4) reason='5連勤回避';
         else if(monthLimit(c.staff)-hoursUsed[c.staffId]<c.hours) reason='月上限超過';
         else if(c.staff.type==='parttime'&&(weeklyHours[c.staffId][wk]||0)+c.hours>20) reason='週20h超過';
         else reason='枠なし';
@@ -1315,7 +1315,7 @@ function generateShifts(){
     <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:12px;">
       <div class="text-success fw6">✓ シフトを作成しました</div>
       <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
-      <div class="text-xs text-muted mt1">社員優先配置 ／ 4連勤禁止 ／ アルバイト週20h・月85h ／ 最低2人・最大4人（平日3人）／ 重複2h以内</div>
+      <div class="text-xs text-muted mt1">社員優先配置 ／ 5連勤禁止（4連勤までOK）／ アルバイト週20h・月85h ／ 最低2人・最大4人（平日3人）</div>
     </div>
     ${shortWarn}
     ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
