@@ -41,8 +41,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',san
 .form-input,.form-select{width:100%;padding:9px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:.875rem;color:var(--gray-800);background:#fff;transition:border-color .15s}
 .form-input:focus,.form-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
 /* Tabs */
-.tabs{display:flex;gap:2px;background:var(--gray-100);padding:4px;border-radius:10px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.tab{padding:8px 14px;border-radius:7px;border:none;background:transparent;cursor:pointer;font-size:.82rem;font-weight:500;color:var(--gray-600);white-space:nowrap;transition:all .15s}
+.tabs{display:flex;gap:2px;background:var(--gray-100);padding:4px;border-radius:10px;margin-bottom:16px;flex-wrap:wrap;}
+.tab{padding:8px 12px;border-radius:7px;border:none;background:transparent;cursor:pointer;font-size:.78rem;font-weight:500;color:var(--gray-600);white-space:nowrap;transition:all .15s}
 .tab.active{background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 /* Table */
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -1017,10 +1017,14 @@ function renderMyShift(){
   const y=now.getFullYear(), m=now.getMonth()+1;
   const prefix=`${y}-${String(m).padStart(2,'0')}`;
   const stores=DB.get('stores');
-  const shifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId&&s.date.startsWith(prefix)).sort((a,b)=>a.date<b.date?-1:1);
+  const confirmedMap=DB.getObj('confirmed_'+prefix,{});
+  const allShifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId&&s.date.startsWith(prefix)).sort((a,b)=>a.date<b.date?-1:1);
+  const shifts=allShifts.filter(s=>confirmedMap[s.storeId+'_'+s.date]);
+  const unconfirmed=allShifts.filter(s=>!confirmedMap[s.storeId+'_'+s.date]);
   const el=document.getElementById('myShiftContent');
-  if(!shifts.length){el.innerHTML='<p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがまだ確定していません</p>';return}
-  el.innerHTML=`<p class="text-muted text-sm mb3">${y}年${m}月</p>`+shifts.map(s=>{
+  if(!allShifts.length){el.innerHTML='<p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがまだありません</p>';return}
+  const unconfBanner=unconfirmed.length?`<div style="padding:8px 12px;background:var(--warning-light);border-radius:8px;margin-bottom:12px;font-size:.8rem;color:var(--warning);">⚠ ${unconfirmed.length}件のシフトが管理者による確定待ちです</div>`:'';
+  el.innerHTML=`<p class="text-muted text-sm mb3">${y}年${m}月</p>${unconfBanner}`+(shifts.length?shifts.map(s=>{
     const [sy,sm,sd]=s.date.split('-');
     const dow=DAYS[new Date(+sy,+sm-1,+sd).getDay()];
     const store=stores.find(x=>x.id===s.storeId);
@@ -1035,7 +1039,7 @@ function renderMyShift(){
         <div class="text-xs text-muted">${h.toFixed(1)}時間</div>
       </div>
     </div>`;
-  }).join('');
+  }).join(''):'<p class="text-muted text-sm" style="text-align:center;padding:12px;">確定済みシフトはまだありません</p>');
 }
 
 // ==================== ADMIN CALENDAR ====================
@@ -1394,9 +1398,11 @@ function renderShiftTable(){
         const shift=storeShifts.find(s=>s.staffId===staff.id&&s.date===date);
         const cnt=dayCounts[date]||0;
         const cellBg=cnt<2&&shift?'background:#fecaca;':cnt<2?'background:#fff5f5;':'';
-        if(!shift) return `<td style="${cellBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')"></td>`;
+        const avail=DB.get('availabilities').find(a=>a.staffId===staff.id&&a.date===date);
+        if(!shift) return `<td style="${cellBg}cursor:pointer;text-align:center;" onclick="openAdjustModal('${store.id}','${date}')"><span style="font-size:.62rem;color:${avail?'var(--primary)':'var(--gray-300)'};">${avail?'希望':'休'}</span></td>`;
+        const confirmed=(DB.getObj('confirmed_'+prefix,{}))[store.id+'_'+date];
         return `<td style="${cellBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')">
-          <div class="sft-cell">${shift.startTime}<br>${shift.endTime}</div>
+          <div class="sft-cell" style="${confirmed?'background:#d1fae5;color:#065f46;':''}">${confirmed?'✓':''} ${shift.startTime}<br>${shift.endTime}</div>
         </td>`;
       }).join('');
       const totalH=storeShifts.filter(s=>s.staffId===staff.id).reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
@@ -1411,10 +1417,22 @@ function renderShiftTable(){
       return `<td style="${bg}text-align:center;font-size:.7rem;">${cnt>0?cnt+'人':''}</td>`;
     }).join('');
 
+    const confirmedMap=DB.getObj('confirmed_'+prefix,{});
+    const allConfirmed=Array.from({length:days},(_,i)=>{
+      const date=ds(tblY,tblM,i+1);
+      const cnt=storeShifts.filter(s=>s.date===date).length;
+      return cnt===0||confirmedMap[store.id+'_'+date];
+    }).every(Boolean);
+
     html+=`<div class="card" style="overflow:hidden;">
-      <div class="flex-between mb3">
+      <div class="flex-between mb3" style="flex-wrap:wrap;gap:8px;">
         <div class="card-title" style="margin:0;border:0;padding:0">${store.name}（${store.openTime}〜${store.closeTime}）</div>
-        <div class="text-xs text-muted">日付をクリックして手動調整</div>
+        <div class="flex gap-2 no-print" style="align-items:center;">
+          <span class="text-xs text-muted">日付クリックで調整</span>
+          ${allConfirmed
+            ?`<span class="badge badge-green">✓ 確定済</span><button class="btn btn-outline btn-sm" onclick="unconfirmStore('${store.id}','${prefix}')">確定解除</button>`
+            :`<button class="btn btn-success btn-sm" onclick="confirmStore('${store.id}','${prefix}')">✓ このシフトを確定</button>`}
+        </div>
       </div>
       <div class="tbl-wrap">
         <table class="sft-table">
@@ -1455,6 +1473,30 @@ function renderShiftTable(){
   }
   if(!html) html='<div class="card"><p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがありません。先にシフト作成タブで自動作成してください。</p></div>';
   document.getElementById('tblArea').innerHTML=html;
+}
+
+// ==================== シフト確定 ====================
+function confirmStore(storeId,prefix){
+  if(!confirm('このシフトを確定しますか？\nスタッフの「自分のシフト」に反映されます。')) return;
+  const days=daysInMonth(+prefix.slice(0,4),+prefix.slice(5,7));
+  const y=+prefix.slice(0,4), m=+prefix.slice(5,7);
+  const allShifts=DB.get('shifts').filter(s=>s.date.startsWith(prefix));
+  const map=DB.getObj('confirmed_'+prefix,{});
+  for(let d=1;d<=days;d++){
+    const date=ds(y,m,d);
+    if(allShifts.some(s=>s.storeId===storeId&&s.date===date)){
+      map[storeId+'_'+date]=true;
+    }
+  }
+  DB.setObj('confirmed_'+prefix,map);
+  renderShiftTable();
+}
+function unconfirmStore(storeId,prefix){
+  if(!confirm('確定を解除しますか？')) return;
+  const map=DB.getObj('confirmed_'+prefix,{});
+  Object.keys(map).filter(k=>k.startsWith(storeId+'_')).forEach(k=>delete map[k]);
+  DB.setObj('confirmed_'+prefix,map);
+  renderShiftTable();
 }
 
 // ==================== 手動調整モーダル ====================
