@@ -299,7 +299,7 @@ tr:last-child td{border-bottom:none}
             </div>
           </div>
           <div class="tbl-wrap">
-            <table><thead><tr><th>名前</th><th>種別</th><th>状態</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>PW</th><th>操作</th></tr></thead>
+            <table><thead><tr><th>名前</th><th>種別</th><th>状態</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>PW</th><th>通知</th><th>操作</th></tr></thead>
             <tbody id="staffTbody"></tbody></table>
           </div>
         </div>
@@ -365,6 +365,7 @@ tr:last-child td{border-bottom:none}
                 <option value="all">全店舗</option>
               </select>
               <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ 印刷・PDF</button>
+              <button class="btn btn-primary btn-sm" onclick="sendTomorrowNotifications()">🔔 明日のシフット通知</button>
             </div>
           </div>
         </div>
@@ -598,6 +599,32 @@ tr:last-child td{border-bottom:none}
   <div id="adjModalBody"></div>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeModal('adjModal')">閉じる</button>
+  </div>
+</div>
+</div>
+
+<!-- Ntfy Setup Modal -->
+<div id="ntfyModal" class="modal-overlay hidden" onclick="overlayClose(event,'ntfyModal')">
+<div class="modal" style="max-width:480px;">
+  <div class="modal-title">📱 プッシュ通知設定 — <span id="ntfySetupName"></span></div>
+  <div style="background:var(--primary-light);border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+    <div class="fw6 text-sm mb2">① このURLをスタッフに送る</div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <input type="text" id="ntfySetupUrl" class="form-input" readonly style="font-size:.78rem;">
+      <button id="ntfyCopyBtn" class="btn btn-primary btn-sm" onclick="copyNtfyUrl()">コピー</button>
+    </div>
+  </div>
+  <div style="background:var(--gray-50);border-radius:8px;padding:12px 14px;font-size:.82rem;line-height:2;">
+    <div class="fw6 mb2">② スタッフ側の設定手順</div>
+    <ol style="padding-left:1.4em;color:var(--gray-700);">
+      <li>スマホに <strong>「ntfy」アプリ</strong> をインストール（無料）<br><span class="text-muted" style="font-size:.75rem;">App Store / Google Play で「ntfy」を検索</span></li>
+      <li>アプリを開き 右上の <strong>「＋」</strong> をタップ</li>
+      <li>上のURLを <strong>そのまま貼り付け</strong> て購読ボタンを押す</li>
+      <li>設定完了！管理者が送信した通知が届きます 🎉</li>
+    </ol>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('ntfyModal')">閉じる</button>
   </div>
 </div>
 </div>
@@ -847,6 +874,7 @@ function renderStaffTable(){
       <td>${s.monthlyHourLimit}h</td>
       <td class="text-sm hide-sm">${sn}</td>
       <td>${pwStatus}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="showNtfySetup('${s.id}','${s.name.replace(/'/g,"\\'")}')">📱 設定</button></td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="openStaffModal('${s.id}')">編集</button>
         <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">削除</button>
@@ -1757,6 +1785,69 @@ function checkTomorrowShift(){
 }
 
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+// ==================== プッシュ通知（ntfy.sh）====================
+function ntfyTopic(staffId){ return 'gkshift-'+staffId.slice(0,10) }
+
+function showNtfySetup(staffId,staffName){
+  document.getElementById('ntfySetupName').textContent=staffName;
+  document.getElementById('ntfySetupUrl').value='https://ntfy.sh/'+ntfyTopic(staffId);
+  document.getElementById('ntfyCopyBtn').textContent='コピー';
+  document.getElementById('ntfyModal').classList.remove('hidden');
+}
+function copyNtfyUrl(){
+  const el=document.getElementById('ntfySetupUrl');
+  el.select();el.setSelectionRange(0,99999);
+  try{document.execCommand('copy');document.getElementById('ntfyCopyBtn').textContent='✓ コピー済み';}catch(e){}
+}
+
+async function sendNtfy(staffId,title,body){
+  const topic=ntfyTopic(staffId);
+  try{
+    const r=await fetch('https://ntfy.sh/'+topic,{
+      method:'POST',
+      headers:{'Title':title,'Priority':'high','Tags':'bell,calendar','Content-Type':'text/plain; charset=utf-8'},
+      body
+    });
+    return r.ok;
+  }catch(e){return false;}
+}
+
+async function sendTomorrowNotifications(){
+  const now=new Date();
+  const tom=new Date(now); tom.setDate(tom.getDate()+1);
+  const ty=tom.getFullYear(),tm=tom.getMonth()+1,td=tom.getDate();
+  const tDate=ds(ty,tm,td);
+  const prefix=`${ty}-${String(tm).padStart(2,'0')}`;
+  const dow=DAYS[tom.getDay()];
+
+  const confirmedMap=DB.getObj('confirmed_'+prefix,{});
+  const allShifts=DB.get('shifts').filter(s=>s.date===tDate);
+  const stores=DB.get('stores');
+  const staffs=DB.get('staffs');
+
+  const targets=allShifts.filter(sh=>confirmedMap[sh.storeId+'_'+tDate]);
+  if(!targets.length){
+    alert(`明日（${tm}/${td}）の確定済みシフトがありません。\nシフト表で確定してから通知してください。`);
+    return;
+  }
+  if(!confirm(`明日（${tm}/${td}・${dow}）のシフットを ${targets.length} 名にプッシュ通知します。\nよろしいですか？`)) return;
+
+  const results=[];
+  for(const sh of targets){
+    const staff=staffs.find(s=>s.id===sh.staffId);
+    const store=stores.find(s=>s.id===sh.storeId);
+    if(!staff){results.push({name:'不明',ok:false});continue;}
+    const storePart=store?store.name+'　':'';
+    const msg=`明日は ${storePart}${sh.startTime}〜${sh.endTime} まで宜しくお願いします。`;
+    const ok=await sendNtfy(staff.id,`📅 明日(${tm}/${td}・${dow})のシフトのご案内`,msg);
+    results.push({name:staff.name,ok});
+  }
+  const lines=results.map(r=>(r.ok?'✓ ':'✗ ')+r.name).join('\n');
+  const okCnt=results.filter(r=>r.ok).length;
+  const ngCnt=results.length-okCnt;
+  alert(`通知送信完了\n\n${lines}\n\n成功：${okCnt}件${ngCnt?'　失敗：'+ngCnt+'件':''}\n※ ntfyアプリ未設定のスタッフには届きません`);
+}
 
 // ==================== データ共有 ====================
 function shareData(){
