@@ -1182,22 +1182,14 @@ function generateShifts(){
       const used=new Set();
       let assignedCount=0;
       let empAssignedCount=0;
-      const assignedSlots=[];
       const overflowToday=[];
 
-      function hasOver2hOverlap(start,end){
-        for(const sl of assignedSlots){
-          const os=Math.max(start,sl.start), oe=Math.min(end,sl.end);
-          if(oe-os>120) return true;
-        }
-        return false;
-      }
-
-      function tryAssign(c, relaxConsecutive, relaxOverlap){
+      // 配置可否チェック（relaxConsecutive=true で4連勤チェックを緩和）
+      function tryAssign(c, relaxConsecutive){
         if(used.has(c.staffId)) return false;
         if(assignedCount>=maxStaff) return false;
-        const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
-        if(c.hours>remaining+0.01) return false;
+        const rem=monthLimit(c.staff)-hoursUsed[c.staffId];
+        if(c.hours>rem+0.01) return false;
         if(!relaxConsecutive&&!workedToday.has(c.staffId)){
           if(getConsecutive(c.staffId,d)>=3) return false;
         }
@@ -1205,7 +1197,6 @@ function generateShifts(){
           const wkUsed=weeklyHours[c.staffId][wk]||0;
           if(wkUsed+c.hours>20+0.01) return false;
         }
-        if(!relaxOverlap&&hasOver2hOverlap(c.start,c.end)) return false;
         return true;
       }
 
@@ -1214,35 +1205,30 @@ function generateShifts(){
         hoursUsed[c.staffId]+=c.hours;
         weeklyHours[c.staffId][wk]=(weeklyHours[c.staffId][wk]||0)+c.hours;
         workedToday.add(c.staffId);
-        assignedSlots.push({start:c.start,end:c.end});
         used.add(c.staffId);
         assignedCount++;
         if(c.staff.type==='employee') empAssignedCount++;
       }
 
-      // === フェーズ1：社員を優先して必要社員数まで配置 ===
+      // === フェーズ1：社員を全員優先配置（maxStaffまで・全制約遵守）===
       for(const c of empCandidates){
-        if(empAssignedCount>=minEmp) break;
         if(assignedCount>=maxStaff) break;
-        if(tryAssign(c,false,false)) assign(c);
-        else if(assignedCount<2&&tryAssign(c,true,true)) assign(c); // 最低2人確保のため緩和
+        if(tryAssign(c,false)) assign(c);
       }
 
-      // === フェーズ2：社員が不足していてアルバイトで補完 ===
-      // （連勤・月上限で社員を入れられない場合にアルバイト起用）
+      // === フェーズ2：アルバイト・パートで残枠を補完 ===
       for(const c of partCandidates){
         if(assignedCount>=maxStaff) break;
-        if(assignedCount>=2&&empAssignedCount>=minEmp) break; // 社員充足かつ2人以上ならここまで
-        if(tryAssign(c,false,false)) assign(c);
+        if(tryAssign(c,false)) assign(c);
       }
 
-      // === フェーズ3：残枠をどちらでも埋める（最低2人確保・カバー優先） ===
-      const remaining=[...empCandidates,...partCandidates].filter(c=>!used.has(c.staffId));
-      for(const c of remaining){
-        if(assignedCount>=maxStaff) break;
-        const relax=assignedCount<2;
-        if(tryAssign(c,false,false)) assign(c);
-        else if(relax&&tryAssign(c,true,true)) assign(c);
+      // === フェーズ3：最低2人確保のため連勤制約を緩和して再試行 ===
+      if(assignedCount<2){
+        const retry=[...empCandidates,...partCandidates].filter(c=>!used.has(c.staffId));
+        for(const c of retry){
+          if(assignedCount>=2) break;
+          if(tryAssign(c,true)) assign(c);
+        }
       }
 
       // === 溢れスタッフ：希望を出したが入れなかったスタッフを記録 ===
@@ -1250,10 +1236,10 @@ function generateShifts(){
         if(used.has(c.staffId)) continue;
         let reason='';
         if(assignedCount>=maxStaff) reason='上限人数超過';
-        else if(getConsecutive(c.staffId,d)>=3) reason='4連勤回避';
+        else if(!workedToday.has(c.staffId)&&getConsecutive(c.staffId,d)>=3) reason='4連勤回避';
         else if(monthLimit(c.staff)-hoursUsed[c.staffId]<c.hours) reason='月上限超過';
         else if(c.staff.type==='parttime'&&(weeklyHours[c.staffId][wk]||0)+c.hours>20) reason='週20h超過';
-        else reason='枠なし・時間帯不一致';
+        else reason='枠なし';
         overflowToday.push({name:c.staff.name,type:c.staff.type,reason,startTime:fromMins(c.start),endTime:fromMins(c.end)});
       }
 
@@ -1756,11 +1742,33 @@ function loadDemoData(){
     {id:s6,name:'渡辺 さくら',type:'part',status:'parental',monthlyHourLimit:60,assignedStores:[st1],pw:'demo1234'},
     {id:s7,name:'中村 亮',type:'part',status:'active',monthlyHourLimit:60,assignedStores:[st1,st2],pw:'demo1234'},
   ];
+  // 当月の希望をデモ用に自動生成（在籍中スタッフのみ）
+  const now=new Date();
+  const dy=now.getFullYear(), dm=now.getMonth()+1;
+  const ddays=daysInMonth(dy,dm);
+  const activeIds=[s1,s2,s4,s5,s7]; // 在籍中スタッフのみ（s3産休・s6育休除外）
+  // 各スタッフのデフォルト勤務パターン（曜日で変化させる）
+  const patterns={
+    [s1]:{start:'09:00',end:'17:00',restDow:[0]},       // 山田：日休み
+    [s2]:{start:'10:00',end:'18:00',restDow:[2]},       // 佐藤：水休み
+    [s4]:{start:'10:00',end:'16:00',restDow:[0,6]},     // 鈴木：土日休み
+    [s5]:{start:'12:00',end:'19:00',restDow:[0,1]},     // 伊藤：日月休み
+    [s7]:{start:'09:00',end:'15:00',restDow:[3,4]},     // 中村：木金休み
+  };
+  const avails=[];
+  for(let d=1;d<=ddays;d++){
+    const dow=new Date(dy,dm-1,d).getDay();
+    for(const sid of activeIds){
+      const p=patterns[sid];
+      if(p.restDow.includes(dow)) continue;
+      avails.push({staffId:sid,date:ds(dy,dm,d),startTime:p.start,endTime:p.end});
+    }
+  }
   DB.set('stores',stores);
   DB.set('staffs',staffs);
   DB.set('shifts',[]);
-  DB.set('availabilities',[]);
-  alert('デモデータを投入しました。\n\n【スタッフ一覧】\n・山田太郎（社員/在籍）\n・佐藤花子（社員/在籍）\n・田中一郎（社員/産休中）※ログイン・シフト除外\n・鈴木美咲（アルバイト/在籍）\n・伊藤健太（アルバイト/在籍）\n・渡辺さくら（パート/育休中）※ログイン・シフト除外\n・中村亮（パート/在籍）\n\n全員のパスワード：demo1234\n管理者パスワード：admin1234');
+  DB.set('availabilities',avails);
+  alert('デモデータを投入しました。\n\n【スタッフ一覧】\n・山田太郎（社員/在籍）\n・佐藤花子（社員/在籍）\n・田中一郎（社員/産休中）※ログイン・シフト除外\n・鈴木美咲（アルバイト/在籍）\n・伊藤健太（アルバイト/在籍）\n・渡辺さくら（パート/育休中）※ログイン・シフト除外\n・中村亮（パート/在籍）\n\n全員のパスワード：demo1234\n管理者パスワード：admin1234\n\n今月の出勤希望を自動設定済みです。\nシフト作成タブで「自動作成」を試せます！');
   renderStaffTable();
   renderStoreTable();
 }
