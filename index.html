@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフト管理アプリ</title>
+<title>ゲンキキッズシフト管理</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -127,8 +127,8 @@ tr:last-child td{border-bottom:none}
 <div id="loginScreen" style="position:relative;z-index:2;">
 <div class="login-wrap">
 <div class="login-card">
-  <div class="login-logo">📅 シフト管理</div>
-  <p class="text-muted text-sm mb4" style="margin-bottom:24px;">出勤希望・シフト管理システム</p>
+  <div class="login-logo">📅 ゲンキキッズシフト管理</div>
+  <p class="text-muted text-sm mb4" style="margin-bottom:24px;">兼松MG担当店　出勤希望・シフト管理システム</p>
   <div class="form-group">
     <label class="form-label">ログイン区分</label>
     <select class="form-select" id="loginRole" onchange="onRoleChange()">
@@ -160,7 +160,7 @@ tr:last-child td{border-bottom:none}
 <!-- ====== APP ====== -->
 <div id="appScreen" class="hidden" style="position:relative;z-index:2;">
   <div class="hdr no-print">
-    <div class="hdr-logo">📅 シフト管理</div>
+    <div class="hdr-logo">📅 ゲンキキッズシフト管理</div>
     <div class="hdr-right">
       <span class="hdr-user" id="hdrUser"></span>
       <button class="btn btn-outline btn-sm" onclick="doLogout()">ログアウト</button>
@@ -717,6 +717,7 @@ function doLogin(){
     document.getElementById('viewStaff').classList.remove('hidden');
     document.getElementById('viewAdmin').classList.add('hidden');
     checkAutoReminder();
+    checkTomorrowShift();
     updateNoticeTabBadge();
     renderStaffCal();
   }
@@ -1702,6 +1703,52 @@ function checkAutoReminder(){
     title:'⚠️ シフト希望の提出をお願いします',
     body:`${y}年${m}月のシフト希望がまだ提出されていません。\n早めに出勤可能な日・時間帯を登録してください。`,
     expiry:`${y}-${String(m).padStart(2,'0')}-28`,
+    createdAt:new Date().toISOString(),
+    auto:true
+  });
+  DB.set('notices',notices);
+  updateNoticeTabBadge();
+}
+
+// 前日通知：翌日に確定シフトがあればお知らせを自動生成
+function checkTomorrowShift(){
+  if(!CU||CU.role!=='staff') return;
+  const now=new Date();
+  const tomorrow=new Date(now);
+  tomorrow.setDate(tomorrow.getDate()+1);
+  const ty=tomorrow.getFullYear(), tm=tomorrow.getMonth()+1, td=tomorrow.getDate();
+  const tDate=ds(ty,tm,td);
+  const prefix=`${ty}-${String(tm).padStart(2,'0')}`;
+
+  // 確定済みシフトを確認
+  const confirmedMap=DB.getObj('confirmed_'+prefix,{});
+  const shifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId&&s.date===tDate);
+  if(!shifts.length) return; // 翌日シフトなし
+
+  const stores=DB.get('stores');
+  const notices=DB.get('notices');
+  const results=[];
+
+  for(const shift of shifts){
+    // 確定済みかチェック
+    if(!confirmedMap[shift.storeId+'_'+tDate]) continue;
+    const store=stores.find(s=>s.id===shift.storeId);
+    const storeName=store?store.name:'';
+    results.push({shift,storeName});
+  }
+  if(!results.length) return;
+
+  // 通知ID：staffId+日付で固定（同じ日に重複作成しない）
+  const autoId=`auto-tomorrow-${CU.staffId}-${tDate}`;
+  if(notices.find(n=>n.id===autoId)) return;
+
+  const dow=DAYS[tomorrow.getDay()];
+  const lines=results.map(({shift,storeName})=>`${storeName?storeName+'：':''}${shift.startTime}〜${shift.endTime} まで宜しくお願いします。`).join('\n');
+  notices.push({
+    id:autoId,
+    title:`📅 明日（${tm}/${td}・${dow}）のシフトのご案内`,
+    body:`明日は ${lines}`,
+    expiry:tDate,
     createdAt:new Date().toISOString(),
     auto:true
   });
