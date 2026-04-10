@@ -169,6 +169,7 @@ tr:last-child td{border-bottom:none}
         <button class="tab active" id="stab-avail" onclick="switchStaffTab('avail')">📆 希望登録</button>
         <button class="tab" id="stab-hours" onclick="switchStaffTab('hours')">⏱ 時間確認</button>
         <button class="tab" id="stab-myshift" onclick="switchStaffTab('myshift')">✅ 自分のシフト</button>
+        <button class="tab" id="stab-notice" onclick="switchStaffTab('notice')">🔔 <span id="noticeTabLabel">お知らせ</span></button>
         <button class="tab" id="stab-pw" onclick="switchStaffTab('pw')">🔑 パスワード変更</button>
       </div>
 
@@ -207,6 +208,14 @@ tr:last-child td{border-bottom:none}
         </div>
       </div>
 
+      <!-- お知らせ -->
+      <div id="stab-notice-c" class="hidden">
+        <div class="card">
+          <div class="card-title">お知らせ</div>
+          <div id="noticeStaffList"></div>
+        </div>
+      </div>
+
       <!-- パスワード変更 -->
       <div id="stab-pw-c" class="hidden">
         <div class="card">
@@ -237,6 +246,7 @@ tr:last-child td{border-bottom:none}
         <button class="tab" id="atab-req" onclick="switchAdminTab('req')">📋 希望確認</button>
         <button class="tab" id="atab-gen" onclick="switchAdminTab('gen')">⚡ シフト作成</button>
         <button class="tab" id="atab-tbl" onclick="switchAdminTab('tbl')">📊 シフト表</button>
+        <button class="tab" id="atab-notice" onclick="switchAdminTab('notice')">🔔 お知らせ</button>
       </div>
 
       <!-- スタッフ管理 -->
@@ -317,6 +327,17 @@ tr:last-child td{border-bottom:none}
           </div>
         </div>
         <div id="tblArea"></div>
+      </div>
+
+      <!-- お知らせ管理 -->
+      <div id="atab-notice-c" class="hidden">
+        <div class="card">
+          <div class="flex-between mb4">
+            <div class="card-title" style="margin:0;border:0;padding:0">お知らせ管理</div>
+            <button class="btn btn-primary btn-sm" onclick="openNoticeModal()">＋ 作成</button>
+          </div>
+          <div id="noticeAdminList"></div>
+        </div>
       </div>
 
     </div>
@@ -409,6 +430,29 @@ tr:last-child td{border-bottom:none}
 </div>
 </div>
 
+<!-- Notice Modal -->
+<div id="noticeModal" class="modal-overlay hidden" onclick="overlayClose(event,'noticeModal')">
+<div class="modal">
+  <div class="modal-title">お知らせ作成</div>
+  <div class="form-group">
+    <label class="form-label">タイトル</label>
+    <input type="text" class="form-input" id="nmTitle" placeholder="例：シフト提出のお願い">
+  </div>
+  <div class="form-group">
+    <label class="form-label">本文</label>
+    <textarea class="form-input" id="nmBody" rows="4" placeholder="内容を入力..." style="resize:vertical;"></textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">掲載期限（省略可）</label>
+    <input type="date" class="form-input" id="nmExpiry">
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('noticeModal')">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveNotice()">投稿</button>
+  </div>
+</div>
+</div>
+
 <!-- Request Detail Modal -->
 <div id="reqModal" class="modal-overlay hidden" onclick="overlayClose(event,'reqModal')">
 <div class="modal">
@@ -493,6 +537,8 @@ function doLogin(){
   } else {
     document.getElementById('viewStaff').classList.remove('hidden');
     document.getElementById('viewAdmin').classList.add('hidden');
+    checkAutoReminder();
+    updateNoticeTabBadge();
     renderStaffCal();
   }
 }
@@ -513,15 +559,16 @@ function doLogout(){
 
 // ==================== TABS ====================
 function switchStaffTab(t){
-  ['avail','hours','myshift','pw'].forEach(x=>{
+  ['avail','hours','myshift','notice','pw'].forEach(x=>{
     document.getElementById('stab-'+x+'-c').classList.toggle('hidden',x!==t);
     document.getElementById('stab-'+x).classList.toggle('active',x===t);
   });
   if(t==='hours') renderHours();
   if(t==='myshift') renderMyShift();
+  if(t==='notice') renderStaffNotices();
 }
 function switchAdminTab(t){
-  ['staff','store','req','gen','tbl'].forEach(x=>{
+  ['staff','store','req','gen','tbl','notice'].forEach(x=>{
     document.getElementById('atab-'+x+'-c').classList.toggle('hidden',x!==t);
     document.getElementById('atab-'+x).classList.toggle('active',x===t);
   });
@@ -530,6 +577,7 @@ function switchAdminTab(t){
   if(t==='req') renderAdminCal();
   if(t==='gen') renderGenTab();
   if(t==='tbl'){ fillTblStoreSel(); renderShiftTable(); }
+  if(t==='notice') renderAdminNotices();
 }
 
 // ==================== STAFF CRUD ====================
@@ -1111,6 +1159,118 @@ function closeModal(id){ document.getElementById(id).classList.add('hidden') }
 function overlayClose(e,id){ if(e.target.id===id) closeModal(id) }
 
 // ==================== INIT ====================
+// ==================== NOTICES ====================
+function openNoticeModal(){
+  document.getElementById('nmTitle').value='';
+  document.getElementById('nmBody').value='';
+  document.getElementById('nmExpiry').value='';
+  document.getElementById('noticeModal').classList.remove('hidden');
+}
+function saveNotice(){
+  const title=document.getElementById('nmTitle').value.trim();
+  const body=document.getElementById('nmBody').value.trim();
+  const expiry=document.getElementById('nmExpiry').value;
+  if(!title){alert('タイトルを入力してください');return}
+  if(!body){alert('本文を入力してください');return}
+  const notices=DB.get('notices');
+  notices.push({id:uuid(),title,body,expiry:expiry||null,createdAt:new Date().toISOString(),auto:false});
+  DB.set('notices',notices);
+  closeModal('noticeModal');
+  renderAdminNotices();
+}
+function deleteNotice(id){
+  if(!confirm('このお知らせを削除しますか？')) return;
+  DB.set('notices',DB.get('notices').filter(n=>n.id!==id));
+  renderAdminNotices();
+}
+function renderAdminNotices(){
+  const notices=DB.get('notices').filter(n=>!n.auto).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  const el=document.getElementById('noticeAdminList');
+  if(!notices.length){el.innerHTML='<p class="text-muted text-sm" style="text-align:center;padding:20px;">お知らせがありません</p>';return}
+  el.innerHTML=notices.map(n=>{
+    const d=n.createdAt.slice(0,10);
+    const exp=n.expiry?`<span class="text-xs text-muted">期限：${n.expiry}</span>`:'';
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+      <div class="flex-between mb2">
+        <div class="fw6 text-sm">${escHtml(n.title)}</div>
+        <button class="btn btn-danger btn-sm" onclick="deleteNotice('${n.id}')">削除</button>
+      </div>
+      <div class="text-sm" style="white-space:pre-wrap;color:var(--gray-600);">${escHtml(n.body)}</div>
+      <div class="flex gap-2 mt2">${exp}<span class="text-xs text-muted">投稿：${d}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// スタッフ用：有効なお知らせ（期限内）＋自動通知を取得
+function getActiveNotices(){
+  const today=new Date().toISOString().slice(0,10);
+  return DB.get('notices').filter(n=>!n.expiry||n.expiry>=today);
+}
+// 未読数
+function getUnreadCount(){
+  const reads=DB.getObj('reads',{});
+  const myReads=reads[CU.staffId]||[];
+  return getActiveNotices().filter(n=>!myReads.includes(n.id)).length;
+}
+function updateNoticeTabBadge(){
+  const cnt=getUnreadCount();
+  document.getElementById('noticeTabLabel').textContent=cnt>0?`お知らせ (${cnt})`:'お知らせ';
+}
+function renderStaffNotices(){
+  const reads=DB.getObj('reads',{});
+  const myReads=reads[CU.staffId]||[];
+  const notices=getActiveNotices().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  const el=document.getElementById('noticeStaffList');
+
+  // 既読にする
+  const newReads=[...new Set([...myReads,...notices.map(n=>n.id)])];
+  reads[CU.staffId]=newReads;
+  DB.setObj('reads',reads);
+  updateNoticeTabBadge();
+
+  if(!notices.length){el.innerHTML='<p class="text-muted text-sm" style="text-align:center;padding:20px;">お知らせはありません</p>';return}
+  el.innerHTML=notices.map(n=>{
+    const isNew=!myReads.includes(n.id);
+    const d=n.createdAt.slice(0,10);
+    return `<div style="padding:14px;border-radius:8px;margin-bottom:10px;background:${isNew?'#eff6ff':'var(--gray-50)'};border:1px solid ${isNew?'#bfdbfe':'var(--gray-200)'};">
+      <div class="flex-between mb2">
+        <div class="fw6 text-sm">${isNew?'<span class="badge badge-blue" style="margin-right:6px;">NEW</span>':''}${escHtml(n.title)}</div>
+        <span class="text-xs text-muted">${d}</span>
+      </div>
+      <div class="text-sm" style="white-space:pre-wrap;color:var(--gray-700);">${escHtml(n.body)}</div>
+    </div>`;
+  }).join('');
+}
+
+// 自動通知：15日以降に当月希望未提出のスタッフへ
+function checkAutoReminder(){
+  if(!CU||CU.role!=='staff') return;
+  const now=new Date();
+  if(now.getDate()<15) return; // 15日未満は対象外
+  const y=now.getFullYear(), m=now.getMonth()+1;
+  const prefix=`${y}-${String(m).padStart(2,'0')}`;
+  const avails=DB.get('availabilities').filter(a=>a.staffId===CU.staffId&&a.date.startsWith(prefix));
+  if(avails.length>0) return; // 提出済みなら何もしない
+
+  // 自動通知IDは staffId+年月で固定
+  const autoId=`auto-remind-${CU.staffId}-${prefix}`;
+  const notices=DB.get('notices');
+  if(notices.find(n=>n.id===autoId)) return; // 既に作成済み
+
+  notices.push({
+    id:autoId,
+    title:'⚠️ シフト希望の提出をお願いします',
+    body:`${y}年${m}月のシフト希望がまだ提出されていません。\n早めに出勤可能な日・時間帯を登録してください。`,
+    expiry:`${y}-${String(m).padStart(2,'0')}-28`,
+    createdAt:new Date().toISOString(),
+    auto:true
+  });
+  DB.set('notices',notices);
+  updateNoticeTabBadge();
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
 window.addEventListener('DOMContentLoaded',()=>{
   // Init admin password
   const cfg=DB.getObj('cfg');
