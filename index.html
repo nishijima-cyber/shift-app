@@ -271,7 +271,7 @@ tr:last-child td{border-bottom:none}
             <button class="btn btn-primary btn-sm" onclick="openStoreModal()">＋ 追加</button>
           </div>
           <div class="tbl-wrap">
-            <table><thead><tr><th>店舗名</th><th>開店</th><th>閉店</th><th>操作</th></tr></thead>
+            <table><thead><tr><th>店舗名</th><th>開店</th><th>閉店</th><th>必要社員数</th><th>操作</th></tr></thead>
             <tbody id="storeTbody"></tbody></table>
           </div>
         </div>
@@ -400,6 +400,11 @@ tr:last-child td{border-bottom:none}
   <div class="form-group">
     <label class="form-label">閉店時間</label>
     <input type="time" class="form-input" id="stModalClose" value="21:00">
+  </div>
+  <div class="form-group">
+    <label class="form-label">必要社員数／日（基本）</label>
+    <input type="number" class="form-input" id="stModalMinEmp" min="0" max="10" value="1" placeholder="1">
+    <div class="text-xs text-muted mt1">社員をこの人数入れた後、不足分をアルバイト・パートで補います</div>
   </div>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeModal('storeModal')">キャンセル</button>
@@ -683,6 +688,7 @@ function openStoreModal(id){
   document.getElementById('stModalName').value=s?s.name:'';
   document.getElementById('stModalOpen').value=s?s.openTime:'09:00';
   document.getElementById('stModalClose').value=s?s.closeTime:'21:00';
+  document.getElementById('stModalMinEmp').value=s!=null&&s.minEmployees!=null?s.minEmployees:1;
   document.getElementById('storeModal').classList.remove('hidden');
 }
 function saveStore(){
@@ -690,13 +696,14 @@ function saveStore(){
   const name=document.getElementById('stModalName').value.trim();
   const open=document.getElementById('stModalOpen').value;
   const close=document.getElementById('stModalClose').value;
+  const minEmp=parseInt(document.getElementById('stModalMinEmp').value)||0;
   if(!name){alert('店舗名を入力してください');return}
   if(open>=close){alert('閉店時間は開店時間より後にしてください');return}
   let stores=DB.get('stores');
   if(id){
-    stores=stores.map(s=>s.id===id?{...s,name,openTime:open,closeTime:close}:s);
+    stores=stores.map(s=>s.id===id?{...s,name,openTime:open,closeTime:close,minEmployees:minEmp}:s);
   } else {
-    stores.push({id:uuid(),name,openTime:open,closeTime:close});
+    stores.push({id:uuid(),name,openTime:open,closeTime:close,minEmployees:minEmp});
   }
   DB.set('stores',stores);
   closeModal('storeModal');
@@ -711,13 +718,14 @@ function renderStoreTable(){
   const stores=DB.get('stores');
   const tb=document.getElementById('storeTbody');
   if(!stores.length){
-    tb.innerHTML='<tr><td colspan="4" class="text-muted" style="text-align:center;padding:20px;">店舗がありません</td></tr>';
+    tb.innerHTML='<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">店舗がありません</td></tr>';
     return;
   }
   tb.innerHTML=stores.map(s=>`<tr>
     <td class="fw6">${s.name}</td>
     <td>${s.openTime}</td>
     <td>${s.closeTime}</td>
+    <td style="text-align:center;">${s.minEmployees!=null?s.minEmployees:1}人</td>
     <td>
       <button class="btn btn-outline btn-sm" onclick="openStoreModal('${s.id}')">編集</button>
       <button class="btn btn-danger btn-sm" onclick="deleteStore('${s.id}')">削除</button>
@@ -933,25 +941,15 @@ function generateShifts(){
 
   let allShifts=DB.get('shifts').filter(s=>!s.date.startsWith(prefix));
 
-  // 月次時間トラッカー
   const hoursUsed={};
-  // 週次時間トラッカー {staffId: {weekKey: hours}}
   const weeklyHours={};
-  // 出勤日セット {staffId: Set<date>}
   const workingDates={};
-
-  staffs.forEach(s=>{
-    hoursUsed[s.id]=0;
-    weeklyHours[s.id]={};
-    workingDates[s.id]=new Set();
-  });
+  staffs.forEach(s=>{ hoursUsed[s.id]=0; weeklyHours[s.id]={}; workingDates[s.id]=new Set(); });
 
   // 月上限（アルバイトは設定値と85hの小さい方）
   function monthLimit(staff){
     return staff.type==='parttime'?Math.min(staff.monthlyHourLimit,85):staff.monthlyHourLimit;
   }
-
-  // その日までの連続出勤日数（d日の前日まで）
   function getConsecutive(staffId,d){
     let count=0;
     for(let i=d-1;i>=1;i--){
@@ -960,24 +958,24 @@ function generateShifts(){
     }
     return count;
   }
-
-  // 週キー（月曜起点）
   function weekKey(d){
     const date=new Date(genY,genM-1,d);
-    const dow=date.getDay(); // 0=Sun
+    const dow=date.getDay();
     const monday=new Date(date);
     monday.setDate(d-(dow===0?6:dow-1));
     return monday.toISOString().slice(0,10);
   }
 
   const newShifts=[];
+  // 溢れスタッフ記録: {date: {storeId: [{staff, reason}]}}
+  const overflowMap={};
   const days=daysInMonth(genY,genM);
 
   for(let d=1;d<=days;d++){
     const date=ds(genY,genM,d);
-    const dow=new Date(genY,genM-1,d).getDay(); // 0=日,6=土
+    const dow=new Date(genY,genM-1,d).getDay();
     const isWeekday=dow>=1&&dow<=5;
-    const maxStaff=isWeekday?3:4; // 平日3人・土日4人
+    const maxStaff=isWeekday?3:4;
     const wk=weekKey(d);
     const dayAvails=avails.filter(a=>a.date===date);
     if(!dayAvails.length) continue;
@@ -987,43 +985,48 @@ function generateShifts(){
     for(const store of stores){
       const stOpen=toMins(store.openTime);
       const stClose=toMins(store.closeTime);
+      const minEmp=store.minEmployees!=null?store.minEmployees:1;
 
-      const candidates=dayAvails
-        .map(a=>{
-          const staff=staffs.find(s=>s.id===a.staffId);
-          if(!staff) return null;
-          if(!(staff.assignedStores||[]).includes(store.id)) return null;
-          const start=Math.max(toMins(a.startTime),stOpen);
-          const end=Math.min(toMins(a.endTime),stClose);
-          const hours=(end-start)/60;
-          if(hours<=0) return null;
-          return{staffId:staff.id,staff,start,end,hours};
-        })
-        .filter(Boolean)
-        .sort((a,b)=>a.start-b.start);
+      // 候補を「社員」「アルバイト・パート」に分離
+      function makeCandidates(typeFilter){
+        return dayAvails
+          .map(a=>{
+            const staff=staffs.find(s=>s.id===a.staffId);
+            if(!staff) return null;
+            if(typeFilter==='emp'&&staff.type!=='employee') return null;
+            if(typeFilter==='part'&&staff.type==='employee') return null;
+            if(!(staff.assignedStores||[]).includes(store.id)) return null;
+            const start=Math.max(toMins(a.startTime),stOpen);
+            const end=Math.min(toMins(a.endTime),stClose);
+            const hours=(end-start)/60;
+            if(hours<=0) return null;
+            return{staffId:staff.id,staff,start,end,hours};
+          })
+          .filter(Boolean)
+          .sort((a,b)=>a.start-b.start);
+      }
+      const empCandidates=makeCandidates('emp');
+      const partCandidates=makeCandidates('part');
+      const allCandidates=[...empCandidates,...partCandidates];
 
-      if(!candidates.length) continue;
+      if(!allCandidates.length) continue;
 
-      let covered=stOpen;
       const used=new Set();
       let assignedCount=0;
-      // 配置済みシフトの時間帯リスト（重複チェック用）
+      let empAssignedCount=0;
       const assignedSlots=[];
+      const overflowToday=[];
 
-      // 他スタッフと2h以上重複しているか判定
       function hasOver2hOverlap(start,end){
         for(const sl of assignedSlots){
-          const overlapStart=Math.max(start,sl.start);
-          const overlapEnd=Math.min(end,sl.end);
-          if(overlapEnd-overlapStart>120) return true; // 120分=2h超
+          const os=Math.max(start,sl.start), oe=Math.min(end,sl.end);
+          if(oe-os>120) return true;
         }
         return false;
       }
 
-      // ルールチェック
-      function isEligible(c, relaxConsecutive, relaxOverlap){
+      function tryAssign(c, relaxConsecutive, relaxOverlap){
         if(used.has(c.staffId)) return false;
-        // 上限人数チェック
         if(assignedCount>=maxStaff) return false;
         const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
         if(c.hours>remaining+0.01) return false;
@@ -1034,43 +1037,61 @@ function generateShifts(){
           const wkUsed=weeklyHours[c.staffId][wk]||0;
           if(wkUsed+c.hours>20+0.01) return false;
         }
-        // 2h以上重複チェック（最低2人確保中は緩和）
         if(!relaxOverlap&&hasOver2hOverlap(c.start,c.end)) return false;
-        return c.start<=covered+60;
+        return true;
       }
 
-      for(let pass=0;pass<candidates.length;pass++){
-        if(covered>=stClose) break;
-        if(assignedCount>=maxStaff) break;
-
-        // 最低2人未満なら連勤・重複チェックを緩和
-        const relax=assignedCount<2;
-        let eligible=candidates.filter(c=>isEligible(c,false,false));
-        if(eligible.length===0&&relax){
-          eligible=candidates.filter(c=>isEligible(c,true,true));
-        }
-
-        if(!eligible.length) break;
-
-        eligible.sort((a,b)=>b.end-a.end);
-        const chosen=eligible[0];
-
-        newShifts.push({
-          id:uuid(),
-          staffId:chosen.staffId,
-          storeId:store.id,
-          date,
-          startTime:fromMins(chosen.start),
-          endTime:fromMins(chosen.end),
-        });
-
-        hoursUsed[chosen.staffId]+=chosen.hours;
-        weeklyHours[chosen.staffId][wk]=(weeklyHours[chosen.staffId][wk]||0)+chosen.hours;
-        workedToday.add(chosen.staffId);
-        assignedSlots.push({start:chosen.start,end:chosen.end});
-        used.add(chosen.staffId);
+      function assign(c){
+        newShifts.push({id:uuid(),staffId:c.staffId,storeId:store.id,date,startTime:fromMins(c.start),endTime:fromMins(c.end)});
+        hoursUsed[c.staffId]+=c.hours;
+        weeklyHours[c.staffId][wk]=(weeklyHours[c.staffId][wk]||0)+c.hours;
+        workedToday.add(c.staffId);
+        assignedSlots.push({start:c.start,end:c.end});
+        used.add(c.staffId);
         assignedCount++;
-        covered=Math.max(covered,chosen.end);
+        if(c.staff.type==='employee') empAssignedCount++;
+      }
+
+      // === フェーズ1：社員を優先して必要社員数まで配置 ===
+      for(const c of empCandidates){
+        if(empAssignedCount>=minEmp) break;
+        if(assignedCount>=maxStaff) break;
+        if(tryAssign(c,false,false)) assign(c);
+        else if(assignedCount<2&&tryAssign(c,true,true)) assign(c); // 最低2人確保のため緩和
+      }
+
+      // === フェーズ2：社員が不足していてアルバイトで補完 ===
+      // （連勤・月上限で社員を入れられない場合にアルバイト起用）
+      for(const c of partCandidates){
+        if(assignedCount>=maxStaff) break;
+        if(assignedCount>=2&&empAssignedCount>=minEmp) break; // 社員充足かつ2人以上ならここまで
+        if(tryAssign(c,false,false)) assign(c);
+      }
+
+      // === フェーズ3：残枠をどちらでも埋める（最低2人確保・カバー優先） ===
+      const remaining=[...empCandidates,...partCandidates].filter(c=>!used.has(c.staffId));
+      for(const c of remaining){
+        if(assignedCount>=maxStaff) break;
+        const relax=assignedCount<2;
+        if(tryAssign(c,false,false)) assign(c);
+        else if(relax&&tryAssign(c,true,true)) assign(c);
+      }
+
+      // === 溢れスタッフ：希望を出したが入れなかったスタッフを記録 ===
+      for(const c of allCandidates){
+        if(used.has(c.staffId)) continue;
+        let reason='';
+        if(assignedCount>=maxStaff) reason='上限人数超過';
+        else if(getConsecutive(c.staffId,d)>=3) reason='4連勤回避';
+        else if(monthLimit(c.staff)-hoursUsed[c.staffId]<c.hours) reason='月上限超過';
+        else if(c.staff.type==='parttime'&&(weeklyHours[c.staffId][wk]||0)+c.hours>20) reason='週20h超過';
+        else reason='枠なし・時間帯不一致';
+        overflowToday.push({name:c.staff.name,type:c.staff.type,reason});
+      }
+
+      if(overflowToday.length){
+        if(!overflowMap[date]) overflowMap[date]={};
+        overflowMap[date][store.id]=overflowToday;
       }
     }
 
@@ -1079,6 +1100,7 @@ function generateShifts(){
 
   allShifts=allShifts.concat(newShifts);
   DB.set('shifts',allShifts);
+  DB.setObj('overflow_'+prefix,overflowMap);
 
   const summaryItems=staffs
     .map(s=>({s,h:hoursUsed[s.id]||0}))
@@ -1096,12 +1118,11 @@ function generateShifts(){
       </div>`;
     }).join('');
 
-  // 2人未満の日を検出
-  const stores2=DB.get('stores');
+  // 2人未満警告
   const shortDays=[];
   for(let d=1;d<=days;d++){
     const date=ds(genY,genM,d);
-    for(const store of stores2){
+    for(const store of stores){
       const cnt=newShifts.filter(s=>s.date===date&&s.storeId===store.id).length;
       if(cnt>0&&cnt<2) shortDays.push(`${genM}/${d} ${store.name}（${cnt}人）`);
     }
@@ -1112,14 +1133,39 @@ function generateShifts(){
         <div style="font-size:.78rem;color:var(--danger);margin-top:4px;">${shortDays.join('、')}</div>
       </div>`:'';
 
+  // 溢れスタッフサマリー
+  const overflowDates=Object.keys(overflowMap).sort();
+  const overflowHtml=overflowDates.length===0?'':`
+    <div class="fw6 text-sm mb3" style="margin-top:16px;">📋 溢れスタッフ（入れなかったスタッフ）</div>
+    <div style="font-size:.75rem;color:var(--gray-500);margin-bottom:8px;">シフト表タブで手動調整できます</div>
+    ${overflowDates.map(date=>{
+      const [y,m,d]=date.split('-');
+      const dow=DAYS[new Date(+y,+m-1,+d).getDay()];
+      const storeEntries=Object.entries(overflowMap[date]);
+      return storeEntries.map(([storeId,list])=>{
+        const store=stores.find(s=>s.id===storeId);
+        const items=list.map(x=>`<span style="display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;border-radius:6px;padding:2px 8px;margin:2px;">
+          ${x.name} ${typeBadge(x.type)} <span style="color:var(--gray-400);font-size:.65rem;">${x.reason}</span>
+        </span>`).join('');
+        return `<div style="padding:8px 0;border-bottom:1px solid var(--gray-100);">
+          <div class="flex-between mb2">
+            <span class="fw6 text-sm">${m}/${d}(${dow})</span>
+            <span class="text-xs text-muted">${store?store.name:''}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:2px;">${items}</div>
+        </div>`;
+      }).join('');
+    }).join('')}`;
+
   document.getElementById('genResult').innerHTML=`
     <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:12px;">
       <div class="text-success fw6">✓ シフトを作成しました</div>
       <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
-      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内 ／ 最低2人・最大4人（平日3人）／ 同時重複2h以内</div>
+      <div class="text-xs text-muted mt1">社員優先配置 ／ 4連勤禁止 ／ アルバイト週20h・月85h ／ 最低2人・最大4人（平日3人）／ 重複2h以内</div>
     </div>
     ${shortWarn}
     ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
+    ${overflowHtml}
   `;
 }
 
@@ -1216,6 +1262,28 @@ function renderShiftTable(){
               ${totalRow}
               <td></td>
             </tr>
+            ${(()=>{
+              // 溢れスタッフ行
+              const prefix2=`${tblY}-${String(tblM).padStart(2,'0')}`;
+              const ovMap=DB.getObj('overflow_'+prefix2,{});
+              const overflowCells=Array.from({length:days},(_,i)=>{
+                const date=ds(tblY,tblM,i+1);
+                const list=(ovMap[date]&&ovMap[date][store.id])||[];
+                if(!list.length) return '<td></td>';
+                const names=list.map(x=>`<div style="white-space:nowrap;font-size:.6rem;color:var(--danger);">${x.name}</div>`).join('');
+                return `<td style="background:#fff5f5;cursor:pointer;" title="${list.map(x=>x.name+'('+x.reason+')').join(', ')}">${names}</td>`;
+              }).join('');
+              const hasAny=Array.from({length:days},(_,i)=>{
+                const date=ds(tblY,tblM,i+1);
+                return (ovMap[date]&&ovMap[date][store.id]||[]).length>0;
+              }).some(Boolean);
+              if(!hasAny) return '';
+              return `<tr style="background:#fff5f5;">
+                <td class="sft-name" style="font-size:.72rem;color:var(--danger);font-weight:600;">溢れ</td>
+                ${overflowCells}
+                <td></td>
+              </tr>`;
+            })()}
           </tbody>
         </table>
       </div>
