@@ -171,6 +171,7 @@ tr:last-child td{border-bottom:none}
         <button class="tab" id="stab-myshift" onclick="switchStaffTab('myshift')">✅ 自分のシフト</button>
         <button class="tab" id="stab-notice" onclick="switchStaffTab('notice')">🔔 <span id="noticeTabLabel">お知らせ</span></button>
         <button class="tab" id="stab-pw" onclick="switchStaffTab('pw')">🔑 パスワード変更</button>
+        <button class="tab" id="stab-shelp" onclick="switchStaffTab('shelp')">❓ 使い方</button>
       </div>
 
       <!-- 希望登録 -->
@@ -217,6 +218,37 @@ tr:last-child td{border-bottom:none}
       </div>
 
       <!-- パスワード変更 -->
+      <!-- スタッフ使い方 -->
+      <div id="stab-shelp-c" class="hidden">
+        <div class="card">
+          <div class="card-title">❓ 使い方ガイド</div>
+          <div style="font-size:.875rem;line-height:1.8;color:var(--gray-700);">
+            <div style="background:var(--primary-light);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+              <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">📋 毎月の流れ</div>
+              <ol style="padding-left:1.2em;line-height:2.2;">
+                <li>毎月<strong>14日まで</strong>に出勤希望を登録してください</li>
+                <li>管理者がシフトを自動作成します</li>
+                <li>「自分のシフト」タブで確定シフトを確認できます</li>
+              </ol>
+            </div>
+            <div style="font-weight:700;margin-bottom:8px;">📆 希望登録</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.82rem;">
+              <tr style="background:var(--gray-50);"><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">操作</th><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">説明</th></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">日付をタップ</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">出勤できる日・時間帯を登録します</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);background:#eff6ff;">青い日</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">希望を登録済みの日です</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);background:var(--success-light);">緑の日</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">シフトが確定した日です</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">登録済みの日をタップ</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">時間の変更・削除ができます</td></tr>
+            </table>
+            <div style="font-weight:700;margin-bottom:8px;">⏱ 時間確認</div>
+            <p style="font-size:.82rem;margin-bottom:16px;">今月の確定シフト時間・希望登録時間と月上限時間をグラフで確認できます。</p>
+            <div style="font-weight:700;margin-bottom:8px;">🔔 お知らせ</div>
+            <p style="font-size:.82rem;margin-bottom:16px;">管理者からのお知らせが届きます。未読があるとタブに件数が表示されます。<br>毎月15日を過ぎても希望登録がない場合は自動でリマインドが届きます。</p>
+            <div style="font-weight:700;margin-bottom:8px;">🔑 パスワード変更</div>
+            <p style="font-size:.82rem;">初回ログイン後は必ずパスワードを自分のものに変更してください。<br>パスワードを忘れた場合は管理者にお問い合わせください。</p>
+          </div>
+        </div>
+      </div>
+
       <div id="stab-pw-c" class="hidden">
         <div class="card">
           <div class="card-title">パスワード変更</div>
@@ -255,10 +287,13 @@ tr:last-child td{border-bottom:none}
         <div class="card">
           <div class="flex-between mb4">
             <div class="card-title" style="margin:0;border:0;padding:0">スタッフ一覧</div>
-            <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 追加</button>
+            <div class="flex gap-2">
+              <button class="btn btn-outline btn-sm" onclick="loadDemoData()">🎯 デモデータ投入</button>
+              <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 追加</button>
+            </div>
           </div>
           <div class="tbl-wrap">
-            <table><thead><tr><th>名前</th><th>種別</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>PW</th><th>操作</th></tr></thead>
+            <table><thead><tr><th>名前</th><th>種別</th><th>状態</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>PW</th><th>操作</th></tr></thead>
             <tbody id="staffTbody"></tbody></table>
           </div>
         </div>
@@ -365,6 +400,7 @@ tr:last-child td{border-bottom:none}
               <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">＋ 追加</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">名前・種別・月上限時間・対応店舗・初期パスワードを設定して登録</td></tr>
               <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">編集</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">情報を変更。パスワードは空欄のままにすると変更されない</td></tr>
               <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">PW初期化</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">スタッフがパスワードを忘れた場合に管理者がリセット</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">勤務ステータス</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">産休・育休・長期休暇中に設定するとログイン不可・シフト作成から除外。履歴は残ります</td></tr>
               <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">削除</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">退職等でスタッフを削除。削除するとシフト履歴も消えます</td></tr>
             </table>
 
@@ -442,6 +478,16 @@ tr:last-child td{border-bottom:none}
       <option value="parttime">アルバイト</option>
       <option value="part">パート</option>
     </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">勤務ステータス</label>
+    <select class="form-select" id="sModalStatus">
+      <option value="active">在籍中</option>
+      <option value="maternity">産休中</option>
+      <option value="parental">育休中</option>
+      <option value="leave">長期休暇中</option>
+    </select>
+    <div class="text-xs text-muted mt1">産休・育休・長期休暇中はシフト作成・ログインから除外されます</div>
   </div>
   <div class="form-group">
     <label class="form-label">月上限時間（h）</label>
@@ -586,6 +632,12 @@ function typeBadge(t){
   const c={employee:'badge-blue',parttime:'badge-green',part:'badge-orange'}[t]||'badge-blue';
   return `<span class="badge ${c}">${typeName(t)}</span>`
 }
+function statusName(s){ return{active:'在籍中',maternity:'産休中',parental:'育休中',leave:'長期休暇中'}[s]||'在籍中' }
+function statusBadge(s){
+  if(!s||s==='active') return '';
+  return `<span class="badge" style="background:#f3e8ff;color:#6d28d9;">${statusName(s)}</span>`;
+}
+function isOnLeave(s){ return s.status&&s.status!=='active'; }
 const DAYS = '日月火水木金土';
 
 // ==================== LOGIN ====================
@@ -615,6 +667,7 @@ function doLogin(){
     if(!id){ showErr('スタッフを選択してください'); return }
     const s=DB.get('staffs').find(x=>x.id===id);
     if(!s){ showErr('スタッフが見つかりません'); return }
+    if(isOnLeave(s)){ showErr(`現在${statusName(s.status)}のためログインできません。管理者にお問い合わせください。`); return }
     if(!s.pw){ showErr('パスワードが設定されていません。管理者に連絡してください。'); return }
     const pw=document.getElementById('staffPw').value;
     if(pw!==s.pw){ showErr('パスワードが正しくありません'); return }
@@ -655,7 +708,7 @@ function doLogout(){
 
 // ==================== TABS ====================
 function switchStaffTab(t){
-  ['avail','hours','myshift','notice','pw'].forEach(x=>{
+  ['avail','hours','myshift','notice','pw','shelp'].forEach(x=>{
     document.getElementById('stab-'+x+'-c').classList.toggle('hidden',x!==t);
     document.getElementById('stab-'+x).classList.toggle('active',x===t);
   });
@@ -684,6 +737,7 @@ function openStaffModal(id){
   document.getElementById('staffModalTitle').textContent=id?'スタッフ編集':'スタッフ追加';
   document.getElementById('sModalName').value=s?s.name:'';
   document.getElementById('sModalType').value=s?s.type:'employee';
+  document.getElementById('sModalStatus').value=s?s.status||'active':'active';
   document.getElementById('sModalLimit').value=s?s.monthlyHourLimit:160;
   document.getElementById('sModalPw').value='';
   document.getElementById('sModalPw').placeholder=id?'変更する場合のみ入力':'初期パスワード（4文字以上）';
@@ -700,6 +754,7 @@ function saveStaff(){
   const id=document.getElementById('sModalId').value;
   const name=document.getElementById('sModalName').value.trim();
   const type=document.getElementById('sModalType').value;
+  const status=document.getElementById('sModalStatus').value;
   const limit=parseInt(document.getElementById('sModalLimit').value);
   const stores=[...document.querySelectorAll('#sModalStores input:checked')].map(el=>el.value);
   const newPw=document.getElementById('sModalPw').value;
@@ -711,10 +766,10 @@ function saveStaff(){
   if(id){
     staffs=staffs.map(s=>{
       if(s.id!==id) return s;
-      return {...s,name,type,monthlyHourLimit:limit,assignedStores:stores,...(newPw?{pw:newPw}:{})};
+      return {...s,name,type,status,monthlyHourLimit:limit,assignedStores:stores,...(newPw?{pw:newPw}:{})};
     });
   } else {
-    staffs.push({id:uuid(),name,type,monthlyHourLimit:limit,assignedStores:stores,pw:newPw});
+    staffs.push({id:uuid(),name,type,status,monthlyHourLimit:limit,assignedStores:stores,pw:newPw});
   }
   DB.set('staffs',staffs);
   closeModal('staffModal');
@@ -743,12 +798,19 @@ function renderStaffTable(){
     tb.innerHTML='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">スタッフがいません</td></tr>';
     return;
   }
-  tb.innerHTML=staffs.map(s=>{
+  // 在籍中を先に、休職中を後に並べる
+  const sorted=[...staffs].sort((a,b)=>{
+    const la=isOnLeave(a)?1:0, lb=isOnLeave(b)?1:0;
+    return la-lb||a.name.localeCompare(b.name,'ja');
+  });
+  tb.innerHTML=sorted.map(s=>{
     const sn=(s.assignedStores||[]).map(id=>{const st=stores.find(x=>x.id===id);return st?st.name:''}).filter(Boolean).join(', ')||'—';
     const pwStatus=s.pw?'<span class="badge badge-green">設定済</span>':'<span class="badge" style="background:#fee2e2;color:#991b1b;">未設定</span>';
-    return `<tr>
+    const rowStyle=isOnLeave(s)?'opacity:.55;background:#faf5ff;':'';
+    return `<tr style="${rowStyle}">
       <td class="fw6">${s.name}</td>
       <td>${typeBadge(s.type)}</td>
+      <td>${statusBadge(s.status)||'<span class="badge badge-green">在籍中</span>'}</td>
       <td>${s.monthlyHourLimit}h</td>
       <td class="text-sm hide-sm">${sn}</td>
       <td>${pwStatus}</td>
@@ -1021,10 +1083,14 @@ function generateShifts(){
 
   let allShifts=DB.get('shifts').filter(s=>!s.date.startsWith(prefix));
 
+  // 休職中スタッフを除外
+  const activeStaffs=staffs.filter(s=>!isOnLeave(s));
+  const leaveStaffs=staffs.filter(s=>isOnLeave(s));
+
   const hoursUsed={};
   const weeklyHours={};
   const workingDates={};
-  staffs.forEach(s=>{ hoursUsed[s.id]=0; weeklyHours[s.id]={}; workingDates[s.id]=new Set(); });
+  activeStaffs.forEach(s=>{ hoursUsed[s.id]=0; weeklyHours[s.id]={}; workingDates[s.id]=new Set(); });
 
   // 月上限（アルバイトは設定値と85hの小さい方）
   function monthLimit(staff){
@@ -1071,7 +1137,7 @@ function generateShifts(){
       function makeCandidates(typeFilter){
         return dayAvails
           .map(a=>{
-            const staff=staffs.find(s=>s.id===a.staffId);
+            const staff=activeStaffs.find(s=>s.id===a.staffId);
             if(!staff) return null;
             if(typeFilter==='emp'&&staff.type!=='employee') return null;
             if(typeFilter==='part'&&staff.type==='employee') return null;
@@ -1182,7 +1248,7 @@ function generateShifts(){
   DB.set('shifts',allShifts);
   DB.setObj('overflow_'+prefix,overflowMap);
 
-  const summaryItems=staffs
+  const summaryItems=activeStaffs
     .map(s=>({s,h:hoursUsed[s.id]||0}))
     .filter(x=>x.h>0)
     .map(({s,h})=>{
@@ -1584,6 +1650,32 @@ function checkAutoReminder(){
 }
 
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function loadDemoData(){
+  if(!confirm('デモデータを投入します。\n現在のスタッフ・店舗データは上書きされます。よろしいですか？')) return;
+  const s1=uuid(),s2=uuid(),s3=uuid(),s4=uuid(),s5=uuid(),s6=uuid(),s7=uuid();
+  const st1=uuid(),st2=uuid();
+  const stores=[
+    {id:st1,name:'本店',openTime:'09:00',closeTime:'21:00',minEmployees:1},
+    {id:st2,name:'駅前店',openTime:'10:00',closeTime:'20:00',minEmployees:1},
+  ];
+  const staffs=[
+    {id:s1,name:'山田 太郎',type:'employee',status:'active',monthlyHourLimit:160,assignedStores:[st1,st2],pw:'demo1234'},
+    {id:s2,name:'佐藤 花子',type:'employee',status:'active',monthlyHourLimit:160,assignedStores:[st1],pw:'demo1234'},
+    {id:s3,name:'田中 一郎',type:'employee',status:'maternity',monthlyHourLimit:160,assignedStores:[st1,st2],pw:'demo1234'},
+    {id:s4,name:'鈴木 美咲',type:'parttime',status:'active',monthlyHourLimit:85,assignedStores:[st1,st2],pw:'demo1234'},
+    {id:s5,name:'伊藤 健太',type:'parttime',status:'active',monthlyHourLimit:85,assignedStores:[st2],pw:'demo1234'},
+    {id:s6,name:'渡辺 さくら',type:'part',status:'parental',monthlyHourLimit:60,assignedStores:[st1],pw:'demo1234'},
+    {id:s7,name:'中村 亮',type:'part',status:'active',monthlyHourLimit:60,assignedStores:[st1,st2],pw:'demo1234'},
+  ];
+  DB.set('stores',stores);
+  DB.set('staffs',staffs);
+  DB.set('shifts',[]);
+  DB.set('availabilities',[]);
+  alert('デモデータを投入しました。\n\n【スタッフ一覧】\n・山田太郎（社員/在籍）\n・佐藤花子（社員/在籍）\n・田中一郎（社員/産休中）※ログイン・シフト除外\n・鈴木美咲（アルバイト/在籍）\n・伊藤健太（アルバイト/在籍）\n・渡辺さくら（パート/育休中）※ログイン・シフト除外\n・中村亮（パート/在籍）\n\n全員のパスワード：demo1234\n管理者パスワード：admin1234');
+  renderStaffTable();
+  renderStoreTable();
+}
 
 window.addEventListener('DOMContentLoaded',()=>{
   // Init admin password
