@@ -287,8 +287,9 @@ tr:last-child td{border-bottom:none}
         <div class="card">
           <div class="flex-between mb4">
             <div class="card-title" style="margin:0;border:0;padding:0">スタッフ一覧</div>
-            <div class="flex gap-2">
+            <div class="flex gap-2" style="flex-wrap:wrap;">
               <button class="btn btn-outline btn-sm" onclick="loadDemoData()">🎯 デモデータ投入</button>
+              <button class="btn btn-outline btn-sm" style="color:var(--success);" onclick="shareData()">📤 スタッフに共有</button>
               <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 追加</button>
             </div>
           </div>
@@ -557,6 +558,23 @@ tr:last-child td{border-bottom:none}
     <button class="btn btn-outline" onclick="closeModal('availModal')">キャンセル</button>
     <button class="btn btn-danger btn-sm" id="avDeleteBtn" onclick="deleteAvail()">削除</button>
     <button class="btn btn-primary" onclick="saveAvail()">登録</button>
+  </div>
+</div>
+</div>
+
+<!-- Share Modal -->
+<div id="shareModal" class="modal-overlay hidden" onclick="overlayClose(event,'shareModal')">
+<div class="modal">
+  <div class="modal-title">📤 スタッフへデータ共有</div>
+  <p id="shareMsg" class="text-sm text-muted mb3"></p>
+  <div class="form-group">
+    <label class="form-label">共有URL</label>
+    <textarea id="shareUrl" class="form-input" rows="4" readonly style="font-size:.72rem;word-break:break-all;resize:none;"></textarea>
+  </div>
+  <p class="text-xs text-muted">このURLを開くとスタッフ・店舗データが自動的に同期されます。<br>LINEやメールで送ってください。</p>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('shareModal')">閉じる</button>
+    <button class="btn btn-primary" id="shareCopyBtn" onclick="copyShareUrl()">📋 コピー</button>
   </div>
 </div>
 </div>
@@ -1651,6 +1669,34 @@ function checkAutoReminder(){
 
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
+// ==================== データ共有 ====================
+function shareData(){
+  const stores=DB.get('stores');
+  const staffs=DB.get('staffs');
+  if(!stores.length&&!staffs.length){alert('共有するデータがありません。\n先にスタッフ・店舗を登録してください。');return}
+  const payload={stores,staffs,v:1};
+  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const url=location.href.split('#')[0]+'#sync='+encoded;
+  // クリップボードにコピー
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=>{
+      showShareModal(url,'コピー完了！このURLをLINEやメールでスタッフに送ってください。');
+    }).catch(()=>showShareModal(url,'下のURLをコピーしてスタッフに送ってください。'));
+  } else {
+    showShareModal(url,'下のURLをコピーしてスタッフに送ってください。');
+  }
+}
+function showShareModal(url,msg){
+  document.getElementById('shareMsg').textContent=msg;
+  document.getElementById('shareUrl').value=url;
+  document.getElementById('shareModal').classList.remove('hidden');
+}
+function copyShareUrl(){
+  const el=document.getElementById('shareUrl');
+  el.select();el.setSelectionRange(0,99999);
+  try{document.execCommand('copy');document.getElementById('shareCopyBtn').textContent='✓ コピー済み';}catch(e){}
+}
+
 function loadDemoData(){
   if(!confirm('デモデータを投入します。\n現在のスタッフ・店舗データは上書きされます。よろしいですか？')) return;
   const s1=uuid(),s2=uuid(),s3=uuid(),s4=uuid(),s5=uuid(),s6=uuid(),s7=uuid();
@@ -1678,9 +1724,24 @@ function loadDemoData(){
 }
 
 window.addEventListener('DOMContentLoaded',()=>{
-  // Init admin password
   const cfg=DB.getObj('cfg');
   if(!cfg.pw) DB.setObj('cfg',{...cfg,pw:DEFAULT_PW});
+
+  // URLに #sync=... があれば自動インポート
+  const hash=location.hash;
+  if(hash.startsWith('#sync=')){
+    try{
+      const encoded=hash.slice(6);
+      const payload=JSON.parse(decodeURIComponent(escape(atob(encoded))));
+      if(payload.stores&&payload.staffs){
+        // スタッフ・店舗だけ上書き（シフト・希望は維持）
+        DB.set('stores',payload.stores);
+        DB.set('staffs',payload.staffs);
+        history.replaceState(null,'',location.href.split('#')[0]);
+        alert('✓ データを同期しました！\nスタッフとして名前を選んでログインしてください。');
+      }
+    } catch(e){ console.warn('sync error',e); }
+  }
 });
 </script>
 </body>
