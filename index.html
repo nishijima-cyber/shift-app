@@ -1973,9 +1973,30 @@ function loadDemoData(){
   renderStoreTable();
 }
 
+// ==================== 自動データクリーンアップ（4ヶ月保持）====================
+function cleanOldData(){
+  const now=new Date();
+  // 当月を含む4ヶ月分を保持 → 4ヶ月前の初日より前を削除
+  const cutoff=new Date(now.getFullYear(),now.getMonth()-3,1);
+  const cutoffStr=`${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,'0')}-01`;
+  const cutoffYM=cutoffStr.slice(0,7); // YYYY-MM
+
+  // シフト・希望を削除
+  DB.set('shifts',DB.get('shifts').filter(s=>s.date>=cutoffStr));
+  DB.set('availabilities',DB.get('availabilities').filter(a=>a.date>=cutoffStr));
+
+  // overflow_YYYY-MM・confirmed_YYYY-MM の古いキーをlocalStorageから削除
+  Object.keys(localStorage).forEach(key=>{
+    if(!key.startsWith('sh_')) return;
+    const m=key.match(/^sh_(overflow|confirmed)_(\d{4}-\d{2})$/);
+    if(m&&m[2]<cutoffYM) localStorage.removeItem(key);
+  });
+}
+
 window.addEventListener('DOMContentLoaded',()=>{
   const cfg=DB.getObj('cfg');
   if(!cfg.pw) DB.setObj('cfg',{...cfg,pw:DEFAULT_PW});
+  cleanOldData(); // 起動時に古いデータを自動削除
 
   // URLに #sync=... があれば自動インポート
   const hash=location.hash;
