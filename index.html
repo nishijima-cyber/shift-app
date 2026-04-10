@@ -975,6 +975,9 @@ function generateShifts(){
 
   for(let d=1;d<=days;d++){
     const date=ds(genY,genM,d);
+    const dow=new Date(genY,genM-1,d).getDay(); // 0=日,6=土
+    const isWeekday=dow>=1&&dow<=5;
+    const maxStaff=isWeekday?3:4; // 平日3人・土日4人
     const wk=weekKey(d);
     const dayAvails=avails.filter(a=>a.date===date);
     if(!dayAvails.length) continue;
@@ -1004,10 +1007,24 @@ function generateShifts(){
       let covered=stOpen;
       const used=new Set();
       let assignedCount=0;
+      // 配置済みシフトの時間帯リスト（重複チェック用）
+      const assignedSlots=[];
 
-      // ルールチェック（最低2人確保のため、2人未満なら4連勤チェックを緩和して再試行）
-      function isEligible(c, relaxConsecutive){
+      // 他スタッフと2h以上重複しているか判定
+      function hasOver2hOverlap(start,end){
+        for(const sl of assignedSlots){
+          const overlapStart=Math.max(start,sl.start);
+          const overlapEnd=Math.min(end,sl.end);
+          if(overlapEnd-overlapStart>120) return true; // 120分=2h超
+        }
+        return false;
+      }
+
+      // ルールチェック
+      function isEligible(c, relaxConsecutive, relaxOverlap){
         if(used.has(c.staffId)) return false;
+        // 上限人数チェック
+        if(assignedCount>=maxStaff) return false;
         const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
         if(c.hours>remaining+0.01) return false;
         if(!relaxConsecutive&&!workedToday.has(c.staffId)){
@@ -1017,17 +1034,20 @@ function generateShifts(){
           const wkUsed=weeklyHours[c.staffId][wk]||0;
           if(wkUsed+c.hours>20+0.01) return false;
         }
+        // 2h以上重複チェック（最低2人確保中は緩和）
+        if(!relaxOverlap&&hasOver2hOverlap(c.start,c.end)) return false;
         return c.start<=covered+60;
       }
 
       for(let pass=0;pass<candidates.length;pass++){
         if(covered>=stClose) break;
+        if(assignedCount>=maxStaff) break;
 
-        // 最低2人未満ならルール緩和（4連勤チェックを外す）
+        // 最低2人未満なら連勤・重複チェックを緩和
         const relax=assignedCount<2;
-        let eligible=candidates.filter(c=>isEligible(c,false));
+        let eligible=candidates.filter(c=>isEligible(c,false,false));
         if(eligible.length===0&&relax){
-          eligible=candidates.filter(c=>isEligible(c,true));
+          eligible=candidates.filter(c=>isEligible(c,true,true));
         }
 
         if(!eligible.length) break;
@@ -1047,6 +1067,7 @@ function generateShifts(){
         hoursUsed[chosen.staffId]+=chosen.hours;
         weeklyHours[chosen.staffId][wk]=(weeklyHours[chosen.staffId][wk]||0)+chosen.hours;
         workedToday.add(chosen.staffId);
+        assignedSlots.push({start:chosen.start,end:chosen.end});
         used.add(chosen.staffId);
         assignedCount++;
         covered=Math.max(covered,chosen.end);
@@ -1095,7 +1116,7 @@ function generateShifts(){
     <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:12px;">
       <div class="text-success fw6">✓ シフトを作成しました</div>
       <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
-      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内 ／ 最低2人優先</div>
+      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内 ／ 最低2人・最大4人（平日3人）／ 同時重複2h以内</div>
     </div>
     ${shortWarn}
     ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
