@@ -107,12 +107,43 @@ tr:last-child td{border-bottom:none}
 .login-card{background:rgba(255,255,255,0.93);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,.25);width:100%;max-width:400px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
 .login-logo{font-size:1.8rem;font-weight:800;color:var(--primary);margin-bottom:4px}
 /* Print */
+.print-header{display:none}
 @media print{
+  @page{size:A4 landscape;margin:8mm}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .no-print{display:none!important}
-  .hdr{position:static;box-shadow:none;border-bottom:2px solid #000}
-  body{background:#fff}
-  .card{box-shadow:none;border:1px solid #ccc;page-break-inside:avoid}
-  .sft-table th,.sft-table td{border:1px solid #999;font-size:9pt}
+  .hdr{display:none!important}
+  .bg-layer{display:none!important}
+  body{background:#fff!important;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif}
+  .main{padding:0;max-width:none}
+  .card{box-shadow:none;border:none;padding:0;margin-bottom:10px;page-break-inside:avoid}
+  .tbl-wrap{overflow:visible}
+  .print-header{display:block;margin-bottom:4px;padding-bottom:4px;border-bottom:3px solid #1e3a5f}
+  /* シフト表 */
+  .sft-table{font-size:7pt;width:100%;border-collapse:collapse}
+  .sft-table th,.sft-table td{border:1px solid #999;padding:1px 2px;text-align:center;white-space:nowrap;height:20px;vertical-align:middle}
+  .sft-table thead th{background:#1e3a5f!important;color:#fff!important;font-weight:700;font-size:7pt}
+  .sft-table .sft-name{text-align:left;padding-left:4px;font-weight:600;min-width:72px;background:#e8eaf6!important}
+  .sft-table .col-sat{background:#e3f2fd!important}
+  .sft-table .col-sun{background:#fce4ec!important}
+  .sft-table .col-short{background:#ffcdd2!important}
+  /* 種別行カラー */
+  .sft-table tr.row-emp td{background:#fffde7!important}
+  .sft-table tr.row-emp td.sft-name{background:#fff9c4!important}
+  .sft-table tr.row-part td{background:#e8f5e9!important}
+  .sft-table tr.row-part td.sft-name{background:#c8e6c9!important}
+  .sft-table tr.row-ptime td{background:#fff3e0!important}
+  .sft-table tr.row-ptime td.sft-name{background:#ffe0b2!important}
+  .sft-table tr.row-total td{background:#f5f5f5!important;font-weight:700}
+  /* シフトセル */
+  .sft-cell{background:transparent!important;color:#000!important;font-size:6.5pt;font-weight:600;border-radius:0;padding:0}
+  .sft-cell.confirmed{color:#1a5c2e!important;font-weight:700}
+  /* 出勤人数行 */
+  .row-count td{background:#e8eaf6!important;font-weight:600;font-size:6.5pt}
+  .row-count td.sft-name{background:#c5cae9!important}
+  /* 溢れ行 */
+  .row-over td{background:#ffebee!important;font-size:6pt;color:#c62828!important}
+  .row-over td.sft-name{background:#ffcdd2!important;font-weight:700}
 }
 @media(max-width:600px){
   .cal-day{min-height:56px}
@@ -365,7 +396,7 @@ tr:last-child td{border-bottom:none}
                 <option value="all">全店舗</option>
               </select>
               <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ 印刷・PDF</button>
-              <button class="btn btn-primary btn-sm" onclick="sendTomorrowNotifications()">🔔 明日のシフット通知</button>
+              <button class="btn btn-primary btn-sm" onclick="sendTomorrowNotifications()">🔔 明日のシフト通知</button>
             </div>
           </div>
         </div>
@@ -1408,55 +1439,95 @@ function renderShiftTable(){
       dayCounts[date]=storeShifts.filter(s=>s.date===date).length;
     }
 
-    // Day headers（クリックで手動調整、2人未満は赤背景）
+    const confirmedMap=DB.getObj('confirmed_'+prefix,{});
+
+    // Day headers
     const dayHeaders=Array.from({length:days},(_,i)=>{
       const d=i+1, date=ds(tblY,tblM,d);
       const dow=new Date(tblY,tblM-1,d).getDay();
-      const color=dow===0?'color:var(--danger)':dow===6?'color:var(--primary)':'';
+      const isSun=dow===0, isSat=dow===6;
       const cnt=dayCounts[date]||0;
-      const bg=cnt<2?'background:#fee2e2;':'';
-      const warn=cnt<2?`<div style="font-size:.55rem;color:var(--danger);font-weight:700;">⚠${cnt}人</div>`:'';
-      return `<th style="${color}${bg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')" title="クリックして調整">
-        ${d}<br><span style="font-weight:400">${DAYS[dow]}</span>${warn}
+      const isShort=cnt>0&&cnt<2;
+      const screenColor=isSun?'color:var(--danger)':isSat?'color:var(--primary)':'';
+      const screenBg=isShort?'background:#fee2e2;':'';
+      const warn=isShort?`<div style="font-size:.5rem;color:var(--danger);font-weight:700;">⚠</div>`:'';
+      const printCls=isShort?' col-short':isSat?' col-sat':isSun?' col-sun':'';
+      return `<th class="${printCls}" style="${screenColor}${screenBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')" title="クリックして調整">
+        ${d}<br><span style="font-weight:400;font-size:.7em">${DAYS[dow]}</span>${warn}
       </th>`;
     }).join('');
 
     const rows=tableStaffs.map(staff=>{
+      const rowCls=staff.type==='employee'?'row-emp':staff.type==='parttime'?'row-part':'row-ptime';
+      const typeLbl=staff.type==='employee'?'社':'AL';
       const cells=Array.from({length:days},(_,i)=>{
         const d=i+1, date=ds(tblY,tblM,d);
         const shift=storeShifts.find(s=>s.staffId===staff.id&&s.date===date);
+        const dow=new Date(tblY,tblM-1,d).getDay();
         const cnt=dayCounts[date]||0;
-        const cellBg=cnt<2&&shift?'background:#fecaca;':cnt<2?'background:#fff5f5;':'';
+        const isShort=cnt>0&&cnt<2;
+        const isSun=dow===0, isSat=dow===6;
+        const screenBg=isShort&&shift?'background:#fecaca;':isShort?'background:#fff5f5;':'';
+        const printCls=isShort&&shift?' col-short':isSat?' col-sat':isSun?' col-sun':'';
         const avail=DB.get('availabilities').find(a=>a.staffId===staff.id&&a.date===date);
-        if(!shift) return `<td style="${cellBg}cursor:pointer;text-align:center;" onclick="openAdjustModal('${store.id}','${date}')"><span style="font-size:.62rem;color:${avail?'var(--primary)':'var(--gray-300)'};">${avail?'希望':'休'}</span></td>`;
-        const confirmed=(DB.getObj('confirmed_'+prefix,{}))[store.id+'_'+date];
-        return `<td style="${cellBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')">
-          <div class="sft-cell" style="${confirmed?'background:#d1fae5;color:#065f46;':''}">${confirmed?'✓':''} ${shift.startTime}<br>${shift.endTime}</div>
-        </td>`;
+        if(!shift){
+          return `<td class="${printCls}" style="${screenBg}cursor:pointer;text-align:center;" onclick="openAdjustModal('${store.id}','${date}')"><span style="font-size:.58rem;color:${avail?'var(--primary)':'var(--gray-300)'};">${avail?'希望':'休'}</span></td>`;
+        }
+        const conf=confirmedMap[store.id+'_'+date];
+        const timeStr=shift.startTime+'〜'+shift.endTime;
+        const screenCell=`<div class="sft-cell${conf?' confirmed':''}" style="${conf?'color:#065f46;font-weight:700;':''}">${conf?'✓ ':''}${timeStr}</div>`;
+        return `<td class="${printCls}" style="${screenBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')">${screenCell}</td>`;
       }).join('');
       const totalH=storeShifts.filter(s=>s.staffId===staff.id).reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
-      return `<tr><td class="sft-name">${staff.isManager?'👑 ':''}${staff.name}</td>${cells}<td class="fw6">${totalH.toFixed(1)}h</td></tr>`;
+      const nameCell=`<td class="sft-name">${staff.isManager?'👑':typeLbl} ${staff.name}</td>`;
+      return `<tr class="${rowCls}">${nameCell}${cells}<td class="fw6" style="text-align:right;padding-right:4px;">${totalH.toFixed(1)}h</td></tr>`;
     }).join('');
 
-    // 合計行（日ごとの人数）
+    // 合計行
     const totalRow=Array.from({length:days},(_,i)=>{
       const d=i+1, date=ds(tblY,tblM,d);
+      const dow=new Date(tblY,tblM-1,d).getDay();
       const cnt=dayCounts[date]||0;
-      const bg=cnt<2?'background:#fee2e2;color:var(--danger);font-weight:700;':'';
-      return `<td style="${bg}text-align:center;font-size:.7rem;">${cnt>0?cnt+'人':''}</td>`;
+      const isShort=cnt>0&&cnt<2;
+      const isSun=dow===0, isSat=dow===6;
+      const screenBg=isShort?'background:#fee2e2;color:var(--danger);font-weight:700;':'';
+      const printCls=isShort?' col-short':isSat?' col-sat':isSun?' col-sun':'';
+      return `<td class="${printCls}" style="${screenBg}text-align:center;font-size:.68rem;">${cnt>0?cnt+'人':''}</td>`;
     }).join('');
 
-    const confirmedMap=DB.getObj('confirmed_'+prefix,{});
     const allConfirmed=Array.from({length:days},(_,i)=>{
       const date=ds(tblY,tblM,i+1);
       const cnt=storeShifts.filter(s=>s.date===date).length;
       return cnt===0||confirmedMap[store.id+'_'+date];
     }).every(Boolean);
 
+    // 溢れスタッフ行
+    const ovMap=DB.getObj('overflow_'+prefix,{});
+    const overflowCells=Array.from({length:days},(_,i)=>{
+      const date=ds(tblY,tblM,i+1);
+      const list=(ovMap[date]&&ovMap[date][store.id])||[];
+      if(!list.length) return '<td></td>';
+      const names=list.map(x=>`<div style="white-space:nowrap;font-size:.58rem;color:var(--danger);">${x.name}</div>`).join('');
+      return `<td style="background:#fff5f5;cursor:pointer;" title="${list.map(x=>x.name+' '+x.startTime+'〜'+x.endTime+'('+x.reason+')').join(', ')}">${names}</td>`;
+    }).join('');
+    const hasOverflow=Array.from({length:days},(_,i)=>(ovMap[ds(tblY,tblM,i+1)]&&ovMap[ds(tblY,tblM,i+1)][store.id]||[]).length>0).some(Boolean);
+
+    // 印刷用ヘッダー
+    const today=new Date().toLocaleDateString('ja-JP');
+    const printHead=`<div class="print-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+        <div style="font-size:11pt;font-weight:800;color:#1e3a5f;">ゲンキキッズ（兼松MG担当店）　${store.name}</div>
+        <div style="font-size:14pt;font-weight:800;color:#1e3a5f;">${tblY}年${tblM}月　シフト表</div>
+        <div style="font-size:8pt;color:#666;">作成日：${today}</div>
+      </div>
+      <div style="font-size:7pt;color:#666;margin-top:2px;">営業時間：${store.openTime}〜${store.closeTime}　最低出勤：${store.minEmployees||1}名　■社 ■AL（アルバイト）■パ</div>
+    </div>`;
+
     html+=`<div class="card" style="overflow:hidden;">
-      <div class="flex-between mb3" style="flex-wrap:wrap;gap:8px;">
+      ${printHead}
+      <div class="flex-between mb3 no-print" style="flex-wrap:wrap;gap:8px;">
         <div class="card-title" style="margin:0;border:0;padding:0">${store.name}（${store.openTime}〜${store.closeTime}）</div>
-        <div class="flex gap-2 no-print" style="align-items:center;">
+        <div class="flex gap-2" style="align-items:center;">
           <span class="text-xs text-muted">日付クリックで調整</span>
           ${allConfirmed
             ?`<span class="badge badge-green">✓ 確定済</span><button class="btn btn-outline btn-sm" onclick="unconfirmStore('${store.id}','${prefix}')">確定解除</button>`
@@ -1465,36 +1536,13 @@ function renderShiftTable(){
       </div>
       <div class="tbl-wrap">
         <table class="sft-table">
-          <thead><tr><th class="sft-name">スタッフ</th>${dayHeaders}<th>合計</th></tr></thead>
+          <thead><tr><th class="sft-name">スタッフ</th>${dayHeaders}<th style="min-width:36px;">合計</th></tr></thead>
           <tbody>
             ${tableStaffs.length?rows:'<tr><td colspan="33" class="text-muted" style="text-align:center;padding:12px;">スタッフなし</td></tr>'}
-            <tr style="background:var(--gray-50);">
-              <td class="sft-name" style="font-size:.72rem;color:var(--gray-500);">出勤人数</td>
-              ${totalRow}
-              <td></td>
+            <tr class="row-count">
+              <td class="sft-name">出勤人数</td>${totalRow}<td></td>
             </tr>
-            ${(()=>{
-              // 溢れスタッフ行
-              const prefix2=`${tblY}-${String(tblM).padStart(2,'0')}`;
-              const ovMap=DB.getObj('overflow_'+prefix2,{});
-              const overflowCells=Array.from({length:days},(_,i)=>{
-                const date=ds(tblY,tblM,i+1);
-                const list=(ovMap[date]&&ovMap[date][store.id])||[];
-                if(!list.length) return '<td></td>';
-                const names=list.map(x=>`<div style="white-space:nowrap;font-size:.6rem;color:var(--danger);">${x.name}</div>`).join('');
-                return `<td style="background:#fff5f5;cursor:pointer;" title="${list.map(x=>x.name+' '+x.startTime+'〜'+x.endTime+'('+x.reason+')').join(', ')}">${names}</td>`;
-              }).join('');
-              const hasAny=Array.from({length:days},(_,i)=>{
-                const date=ds(tblY,tblM,i+1);
-                return (ovMap[date]&&ovMap[date][store.id]||[]).length>0;
-              }).some(Boolean);
-              if(!hasAny) return '';
-              return `<tr style="background:#fff5f5;">
-                <td class="sft-name" style="font-size:.72rem;color:var(--danger);font-weight:600;">溢れ</td>
-                ${overflowCells}
-                <td></td>
-              </tr>`;
-            })()}
+            ${hasOverflow?`<tr class="row-over"><td class="sft-name">溢れ</td>${overflowCells}<td></td></tr>`:''}
           </tbody>
         </table>
       </div>
@@ -1831,7 +1879,7 @@ async function sendTomorrowNotifications(){
     alert(`明日（${tm}/${td}）の確定済みシフトがありません。\nシフト表で確定してから通知してください。`);
     return;
   }
-  if(!confirm(`明日（${tm}/${td}・${dow}）のシフットを ${targets.length} 名にプッシュ通知します。\nよろしいですか？`)) return;
+  if(!confirm(`明日（${tm}/${td}・${dow}）のシフトを ${targets.length} 名にプッシュ通知します。\nよろしいですか？`)) return;
 
   const results=[];
   for(const sh of targets){
