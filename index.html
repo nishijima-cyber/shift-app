@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>シフト管理アプリ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#4f46e5;--primary-dark:#3730a3;--primary-light:#ede9fe;
+  --success:#16a34a;--success-light:#dcfce7;
+  --danger:#dc2626;--danger-light:#fee2e2;
+  --warning:#d97706;--warning-light:#fef3c7;
+  --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;
+  --gray-300:#d1d5db;--gray-400:#9ca3af;--gray-500:#6b7280;
+  --gray-600:#4b5563;--gray-700:#374151;--gray-800:#1f2937;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;background:var(--gray-50);color:var(--gray-800);min-height:100vh}
+/* Header */
+.hdr{background:#fff;border-bottom:1px solid var(--gray-200);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.hdr-logo{font-size:1.1rem;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.hdr-user{font-size:.8rem;color:var(--gray-500)}
+/* Main */
+.main{max-width:960px;margin:0 auto;padding:16px}
+/* Card */
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px}
+.card-title{font-size:.95rem;font-weight:700;color:var(--gray-700);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-100)}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.875rem;font-weight:500;transition:all .15s;line-height:1}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-success{background:var(--success);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-outline{background:#fff;color:var(--gray-700);border:1px solid var(--gray-300)}.btn-outline:hover{background:var(--gray-50)}
+.btn-sm{padding:5px 10px;font-size:.8rem}
+.btn-lg{padding:12px 24px;font-size:1rem}
+.btn-block{width:100%}
+/* Forms */
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:.875rem;font-weight:500;color:var(--gray-700);margin-bottom:5px}
+.form-input,.form-select{width:100%;padding:9px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:.875rem;color:var(--gray-800);background:#fff;transition:border-color .15s}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+/* Tabs */
+.tabs{display:flex;gap:2px;background:var(--gray-100);padding:4px;border-radius:10px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{padding:8px 14px;border-radius:7px;border:none;background:transparent;cursor:pointer;font-size:.82rem;font-weight:500;color:var(--gray-600);white-space:nowrap;transition:all .15s}
+.tab.active{background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+/* Table */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{text-align:left;padding:10px 12px;background:var(--gray-50);color:var(--gray-600);font-weight:600;border-bottom:1px solid var(--gray-200);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--gray-100);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+/* Badge */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.72rem;font-weight:600}
+.badge-blue{background:#dbeafe;color:#1e40af}
+.badge-green{background:#d1fae5;color:#065f46}
+.badge-orange{background:#ffedd5;color:#9a3412}
+/* Calendar */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-dh{text-align:center;font-size:.72rem;font-weight:600;color:var(--gray-500);padding:4px 2px}
+.cal-day{border:1.5px solid var(--gray-200);border-radius:8px;min-height:72px;padding:4px;cursor:pointer;transition:all .15s;background:#fff;position:relative}
+.cal-day:hover{border-color:var(--primary);z-index:1}
+.cal-day.empty{background:var(--gray-50);cursor:default;border-color:transparent;min-height:72px}
+.cal-day.has-avail{background:#eff6ff;border-color:#bfdbfe}
+.cal-day.has-shift{background:var(--success-light);border-color:#86efac}
+.cal-day.today{border-color:var(--primary);border-width:2px}
+.cal-num{font-size:.8rem;font-weight:600;color:var(--gray-600);width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.cal-day.today .cal-num{background:var(--primary);color:#fff}
+.cal-tag{font-size:.6rem;line-height:1.3;margin-top:2px;color:var(--primary)}
+.cal-tag.shift{color:var(--success)}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:1.05rem;font-weight:700;margin-bottom:18px;color:var(--gray-800)}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+/* Progress */
+.progress{height:8px;background:var(--gray-200);border-radius:99px;overflow:hidden;margin-top:4px}
+.progress-bar{height:100%;background:var(--primary);border-radius:99px;transition:width .4s}
+.progress-bar.warn{background:var(--warning)}
+.progress-bar.danger{background:var(--danger)}
+/* Flex utils */
+.flex{display:flex;align-items:center}
+.flex-between{display:flex;align-items:center;justify-content:space-between}
+.gap-2{gap:8px}.gap-3{gap:12px}
+.text-sm{font-size:.875rem}
+.text-xs{font-size:.75rem}
+.text-muted{color:var(--gray-500)}
+.text-danger{color:var(--danger)}
+.text-success{color:var(--success)}
+.fw6{font-weight:600}
+.fw7{font-weight:700}
+.mt1{margin-top:4px}.mt2{margin-top:8px}.mt3{margin-top:12px}.mt4{margin-top:16px}
+.mb2{margin-bottom:8px}.mb3{margin-bottom:12px}.mb4{margin-bottom:16px}
+.hidden{display:none!important}
+/* Shift print table */
+.sft-table{border-collapse:collapse;font-size:.72rem;min-width:100%}
+.sft-table th,.sft-table td{border:1px solid var(--gray-300);padding:4px 6px;text-align:center;white-space:nowrap}
+.sft-table thead th{background:var(--gray-100);font-weight:600}
+.sft-table .sft-name{text-align:left;font-weight:600;background:var(--gray-50)}
+.sft-cell{background:var(--primary-light);border-radius:4px;padding:2px 3px;font-size:.65rem;color:var(--primary-dark)}
+/* Login */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#ede9fe 0%,#dbeafe 100%)}
+.login-card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,.12);width:100%;max-width:400px}
+.login-logo{font-size:1.8rem;font-weight:800;color:var(--primary);margin-bottom:4px}
+/* Print */
+@media print{
+  .no-print{display:none!important}
+  .hdr{position:static;box-shadow:none;border-bottom:2px solid #000}
+  body{background:#fff}
+  .card{box-shadow:none;border:1px solid #ccc;page-break-inside:avoid}
+  .sft-table th,.sft-table td{border:1px solid #999;font-size:9pt}
+}
+@media(max-width:600px){
+  .cal-day{min-height:56px}
+  .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ====== LOGIN ====== -->
+<div id="loginScreen">
+<div class="login-wrap">
+<div class="login-card">
+  <div class="login-logo">📅 シフト管理</div>
+  <p class="text-muted text-sm mb4" style="margin-bottom:24px;">出勤希望・シフト管理システム</p>
+  <div class="form-group">
+    <label class="form-label">ログイン区分</label>
+    <select class="form-select" id="loginRole" onchange="onRoleChange()">
+      <option value="">選択してください</option>
+      <option value="admin">管理者</option>
+      <option value="staff">スタッフ</option>
+    </select>
+  </div>
+  <div id="adminArea" class="hidden form-group">
+    <label class="form-label">管理者パスワード</label>
+    <input type="password" class="form-input" id="adminPw" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+  <div id="staffArea" class="hidden form-group">
+    <label class="form-label">名前を選択</label>
+    <select class="form-select" id="staffSel"></select>
+  </div>
+  <button class="btn btn-primary btn-block" onclick="doLogin()">ログイン</button>
+  <p id="loginErr" class="text-danger text-sm hidden" style="margin-top:8px;"></p>
+</div>
+</div>
+</div>
+
+<!-- ====== APP ====== -->
+<div id="appScreen" class="hidden">
+  <div class="hdr no-print">
+    <div class="hdr-logo">📅 シフト管理</div>
+    <div class="hdr-right">
+      <span class="hdr-user" id="hdrUser"></span>
+      <button class="btn btn-outline btn-sm" onclick="doLogout()">ログアウト</button>
+    </div>
+  </div>
+  <div class="main">
+
+    <!-- STAFF VIEW -->
+    <div id="viewStaff" class="hidden">
+      <div class="tabs no-print">
+        <button class="tab active" id="stab-avail" onclick="switchStaffTab('avail')">📆 希望登録</button>
+        <button class="tab" id="stab-hours" onclick="switchStaffTab('hours')">⏱ 時間確認</button>
+        <button class="tab" id="stab-myshift" onclick="switchStaffTab('myshift')">✅ 自分のシフト</button>
+      </div>
+
+      <!-- 希望登録 -->
+      <div id="stab-avail-c">
+        <div class="card">
+          <div class="flex-between mb3">
+            <div class="card-title" style="margin:0;border:0;padding:0">出勤希望登録</div>
+            <div class="flex gap-2">
+              <button class="btn btn-outline btn-sm" onclick="sCalPrev()">◀</button>
+              <span class="fw6" id="sCalLabel"></span>
+              <button class="btn btn-outline btn-sm" onclick="sCalNext()">▶</button>
+            </div>
+          </div>
+          <div id="sCal"></div>
+          <div class="flex gap-3 mt3" style="font-size:.75rem;flex-wrap:wrap;">
+            <span class="flex gap-2"><span style="width:12px;height:12px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:3px;display:inline-block"></span>希望登録済</span>
+            <span class="flex gap-2"><span style="width:12px;height:12px;background:var(--success-light);border:1.5px solid #86efac;border-radius:3px;display:inline-block"></span>シフト確定</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 時間確認 -->
+      <div id="stab-hours-c" class="hidden">
+        <div class="card">
+          <div class="card-title">今月の時間確認</div>
+          <div id="hoursContent"></div>
+        </div>
+      </div>
+
+      <!-- 自分のシフト -->
+      <div id="stab-myshift-c" class="hidden">
+        <div class="card">
+          <div class="card-title">自分のシフト</div>
+          <div id="myShiftContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN VIEW -->
+    <div id="viewAdmin" class="hidden">
+      <div class="tabs no-print">
+        <button class="tab active" id="atab-staff" onclick="switchAdminTab('staff')">👤 スタッフ</button>
+        <button class="tab" id="atab-store" onclick="switchAdminTab('store')">🏪 店舗</button>
+        <button class="tab" id="atab-req" onclick="switchAdminTab('req')">📋 希望確認</button>
+        <button class="tab" id="atab-gen" onclick="switchAdminTab('gen')">⚡ シフト作成</button>
+        <button class="tab" id="atab-tbl" onclick="switchAdminTab('tbl')">📊 シフト表</button>
+      </div>
+
+      <!-- スタッフ管理 -->
+      <div id="atab-staff-c">
+        <div class="card">
+          <div class="flex-between mb4">
+            <div class="card-title" style="margin:0;border:0;padding:0">スタッフ一覧</div>
+            <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 追加</button>
+          </div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>名前</th><th>種別</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>操作</th></tr></thead>
+            <tbody id="staffTbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 店舗管理 -->
+      <div id="atab-store-c" class="hidden">
+        <div class="card">
+          <div class="flex-between mb4">
+            <div class="card-title" style="margin:0;border:0;padding:0">店舗一覧</div>
+            <button class="btn btn-primary btn-sm" onclick="openStoreModal()">＋ 追加</button>
+          </div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>店舗名</th><th>開店</th><th>閉店</th><th>操作</th></tr></thead>
+            <tbody id="storeTbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 希望確認 -->
+      <div id="atab-req-c" class="hidden">
+        <div class="card">
+          <div class="flex-between mb3">
+            <div class="card-title" style="margin:0;border:0;padding:0">スタッフ希望一覧</div>
+            <div class="flex gap-2">
+              <button class="btn btn-outline btn-sm" onclick="aCalPrev()">◀</button>
+              <span class="fw6" id="aCalLabel"></span>
+              <button class="btn btn-outline btn-sm" onclick="aCalNext()">▶</button>
+            </div>
+          </div>
+          <div id="aCal"></div>
+        </div>
+      </div>
+
+      <!-- シフト作成 -->
+      <div id="atab-gen-c" class="hidden">
+        <div class="card">
+          <div class="card-title">シフト自動作成</div>
+          <div class="flex-between mb4">
+            <div class="flex gap-2">
+              <button class="btn btn-outline btn-sm" onclick="genPrev()">◀</button>
+              <span class="fw6" id="genLabel"></span>
+              <button class="btn btn-outline btn-sm" onclick="genNext()">▶</button>
+            </div>
+            <button class="btn btn-success btn-lg" onclick="generateShifts()">⚡ 自動作成</button>
+          </div>
+          <div id="genResult"></div>
+        </div>
+      </div>
+
+      <!-- シフト表 -->
+      <div id="atab-tbl-c" class="hidden">
+        <div class="card no-print">
+          <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+            <div class="card-title" style="margin:0;border:0;padding:0">シフト表</div>
+            <div class="flex gap-2" style="flex-wrap:wrap;">
+              <div class="flex gap-2">
+                <button class="btn btn-outline btn-sm" onclick="tblPrev()">◀</button>
+                <span class="fw6" id="tblLabel"></span>
+                <button class="btn btn-outline btn-sm" onclick="tblNext()">▶</button>
+              </div>
+              <select class="form-select" style="width:auto;" id="tblStoreSel" onchange="renderShiftTable()">
+                <option value="all">全店舗</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ 印刷・PDF</button>
+            </div>
+          </div>
+        </div>
+        <div id="tblArea"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODALS ====== -->
+
+<!-- Staff Modal -->
+<div id="staffModal" class="modal-overlay hidden" onclick="overlayClose(event,'staffModal')">
+<div class="modal">
+  <div class="modal-title" id="staffModalTitle">スタッフ追加</div>
+  <input type="hidden" id="sModalId">
+  <div class="form-group">
+    <label class="form-label">名前</label>
+    <input type="text" class="form-input" id="sModalName" placeholder="山田 太郎">
+  </div>
+  <div class="form-group">
+    <label class="form-label">種別</label>
+    <select class="form-select" id="sModalType">
+      <option value="employee">社員</option>
+      <option value="parttime">アルバイト</option>
+      <option value="part">パート</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">月上限時間（h）</label>
+    <input type="number" class="form-input" id="sModalLimit" min="1" max="400" placeholder="160">
+  </div>
+  <div class="form-group">
+    <label class="form-label">対応店舗（複数選択可）</label>
+    <div id="sModalStores" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('staffModal')">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+  </div>
+</div>
+</div>
+
+<!-- Store Modal -->
+<div id="storeModal" class="modal-overlay hidden" onclick="overlayClose(event,'storeModal')">
+<div class="modal">
+  <div class="modal-title" id="storeModalTitle">店舗追加</div>
+  <input type="hidden" id="stModalId">
+  <div class="form-group">
+    <label class="form-label">店舗名</label>
+    <input type="text" class="form-input" id="stModalName" placeholder="〇〇店">
+  </div>
+  <div class="form-group">
+    <label class="form-label">開店時間</label>
+    <input type="time" class="form-input" id="stModalOpen" value="09:00">
+  </div>
+  <div class="form-group">
+    <label class="form-label">閉店時間</label>
+    <input type="time" class="form-input" id="stModalClose" value="21:00">
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('storeModal')">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveStore()">保存</button>
+  </div>
+</div>
+</div>
+
+<!-- Availability Modal -->
+<div id="availModal" class="modal-overlay hidden" onclick="overlayClose(event,'availModal')">
+<div class="modal">
+  <div class="modal-title" id="availModalTitle">出勤希望登録</div>
+  <input type="hidden" id="avModalDate">
+  <div class="form-group">
+    <label class="form-label">開始時間</label>
+    <input type="time" class="form-input" id="avStart" value="09:00">
+  </div>
+  <div class="form-group">
+    <label class="form-label">終了時間</label>
+    <input type="time" class="form-input" id="avEnd" value="17:00">
+  </div>
+  <div id="avExisting" class="text-sm text-muted mt2"></div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('availModal')">キャンセル</button>
+    <button class="btn btn-danger btn-sm" id="avDeleteBtn" onclick="deleteAvail()">削除</button>
+    <button class="btn btn-primary" onclick="saveAvail()">登録</button>
+  </div>
+</div>
+</div>
+
+<!-- Request Detail Modal -->
+<div id="reqModal" class="modal-overlay hidden" onclick="overlayClose(event,'reqModal')">
+<div class="modal">
+  <div class="modal-title" id="reqModalTitle">希望詳細</div>
+  <div id="reqModalContent"></div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('reqModal')">閉じる</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ==================== DATA ====================
+const DB = {
+  get(k){ try{return JSON.parse(localStorage.getItem('sh_'+k))||[]}catch{return[]} },
+  set(k,v){ localStorage.setItem('sh_'+k,JSON.stringify(v)) },
+  getObj(k,d={}){ try{return JSON.parse(localStorage.getItem('sh_'+k))||d}catch{return d} },
+  setObj(k,v){ localStorage.setItem('sh_'+k,JSON.stringify(v)) }
+};
+
+const DEFAULT_PW = 'admin1234';
+let CU = null; // currentUser: {role, staffId, name}
+let sCalY, sCalM, aCalY, aCalM, genY, genM, tblY, tblM;
+
+// ==================== UTILS ====================
+function uuid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2) }
+function toMins(t){ const[h,m]=t.split(':').map(Number); return h*60+m }
+function fromMins(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0') }
+function calcH(s,e){ return Math.max(0,(toMins(e)-toMins(s))/60) }
+function daysInMonth(y,m){ return new Date(y,m,0).getDate() }
+function firstDow(y,m){ return new Date(y,m-1,1).getDay() }
+function ds(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` }
+function typeName(t){ return{employee:'社員',parttime:'アルバイト',part:'パート'}[t]||t }
+function typeBadge(t){
+  const c={employee:'badge-blue',parttime:'badge-green',part:'badge-orange'}[t]||'badge-blue';
+  return `<span class="badge ${c}">${typeName(t)}</span>`
+}
+const DAYS = '日月火水木金土';
+
+// ==================== LOGIN ====================
+function onRoleChange(){
+  const r=document.getElementById('loginRole').value;
+  document.getElementById('adminArea').classList.toggle('hidden',r!=='admin');
+  document.getElementById('staffArea').classList.toggle('hidden',r!=='staff');
+  if(r==='staff') fillStaffSel();
+}
+function fillStaffSel(){
+  const sel=document.getElementById('staffSel');
+  const staffs=DB.get('staffs');
+  sel.innerHTML='<option value="">スタッフを選択</option>'+staffs.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+function doLogin(){
+  const r=document.getElementById('loginRole').value;
+  const err=document.getElementById('loginErr');
+  err.classList.add('hidden');
+  if(!r){ showErr('ログイン区分を選択してください'); return }
+  if(r==='admin'){
+    const pw=document.getElementById('adminPw').value;
+    const cfg=DB.getObj('cfg',{pw:DEFAULT_PW});
+    if(pw!==cfg.pw){ showErr('パスワードが正しくありません'); return }
+    CU={role:'admin',name:'管理者'};
+  } else {
+    const id=document.getElementById('staffSel').value;
+    if(!id){ showErr('スタッフを選択してください'); return }
+    const s=DB.get('staffs').find(x=>x.id===id);
+    if(!s){ showErr('スタッフが見つかりません'); return }
+    CU={role:'staff',staffId:id,name:s.name};
+  }
+  const now=new Date();
+  sCalY=aCalY=genY=tblY=now.getFullYear();
+  sCalM=aCalM=genM=tblM=now.getMonth()+1;
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  document.getElementById('hdrUser').textContent=CU.name;
+  if(CU.role==='admin'){
+    document.getElementById('viewAdmin').classList.remove('hidden');
+    document.getElementById('viewStaff').classList.add('hidden');
+    renderStaffTable(); renderStoreTable();
+  } else {
+    document.getElementById('viewStaff').classList.remove('hidden');
+    document.getElementById('viewAdmin').classList.add('hidden');
+    renderStaffCal();
+  }
+}
+function showErr(msg){
+  const e=document.getElementById('loginErr');
+  e.textContent=msg; e.classList.remove('hidden');
+}
+function doLogout(){
+  CU=null;
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginRole').value='';
+  document.getElementById('adminArea').classList.add('hidden');
+  document.getElementById('staffArea').classList.add('hidden');
+  document.getElementById('adminPw').value='';
+}
+
+// ==================== TABS ====================
+function switchStaffTab(t){
+  ['avail','hours','myshift'].forEach(x=>{
+    document.getElementById('stab-'+x+'-c').classList.toggle('hidden',x!==t);
+    document.getElementById('stab-'+x).classList.toggle('active',x===t);
+  });
+  if(t==='hours') renderHours();
+  if(t==='myshift') renderMyShift();
+}
+function switchAdminTab(t){
+  ['staff','store','req','gen','tbl'].forEach(x=>{
+    document.getElementById('atab-'+x+'-c').classList.toggle('hidden',x!==t);
+    document.getElementById('atab-'+x).classList.toggle('active',x===t);
+  });
+  if(t==='staff') renderStaffTable();
+  if(t==='store') renderStoreTable();
+  if(t==='req') renderAdminCal();
+  if(t==='gen') renderGenTab();
+  if(t==='tbl'){ fillTblStoreSel(); renderShiftTable(); }
+}
+
+// ==================== STAFF CRUD ====================
+function openStaffModal(id){
+  const stores=DB.get('stores');
+  const s=id?DB.get('staffs').find(x=>x.id===id):null;
+  document.getElementById('sModalId').value=id||'';
+  document.getElementById('staffModalTitle').textContent=id?'スタッフ編集':'スタッフ追加';
+  document.getElementById('sModalName').value=s?s.name:'';
+  document.getElementById('sModalType').value=s?s.type:'employee';
+  document.getElementById('sModalLimit').value=s?s.monthlyHourLimit:160;
+  const div=document.getElementById('sModalStores');
+  div.innerHTML=stores.length===0
+    ?'<span class="text-muted text-sm">先に店舗を登録してください</span>'
+    :stores.map(st=>`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.875rem;">
+        <input type="checkbox" value="${st.id}" ${s&&(s.assignedStores||[]).includes(st.id)?'checked':''}>${st.name}
+      </label>`).join('');
+  document.getElementById('staffModal').classList.remove('hidden');
+}
+function saveStaff(){
+  const id=document.getElementById('sModalId').value;
+  const name=document.getElementById('sModalName').value.trim();
+  const type=document.getElementById('sModalType').value;
+  const limit=parseInt(document.getElementById('sModalLimit').value);
+  const stores=[...document.querySelectorAll('#sModalStores input:checked')].map(el=>el.value);
+  if(!name){alert('名前を入力してください');return}
+  if(!limit||limit<1){alert('月上限時間を入力してください');return}
+  let staffs=DB.get('staffs');
+  if(id){
+    staffs=staffs.map(s=>s.id===id?{...s,name,type,monthlyHourLimit:limit,assignedStores:stores}:s);
+  } else {
+    staffs.push({id:uuid(),name,type,monthlyHourLimit:limit,assignedStores:stores});
+  }
+  DB.set('staffs',staffs);
+  closeModal('staffModal');
+  renderStaffTable();
+}
+function deleteStaff(id){
+  if(!confirm('このスタッフを削除しますか？')) return;
+  DB.set('staffs',DB.get('staffs').filter(s=>s.id!==id));
+  renderStaffTable();
+}
+function renderStaffTable(){
+  const staffs=DB.get('staffs'), stores=DB.get('stores');
+  const tb=document.getElementById('staffTbody');
+  if(!staffs.length){
+    tb.innerHTML='<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">スタッフがいません</td></tr>';
+    return;
+  }
+  tb.innerHTML=staffs.map(s=>{
+    const sn=(s.assignedStores||[]).map(id=>{const st=stores.find(x=>x.id===id);return st?st.name:''}).filter(Boolean).join(', ')||'—';
+    return `<tr>
+      <td class="fw6">${s.name}</td>
+      <td>${typeBadge(s.type)}</td>
+      <td>${s.monthlyHourLimit}h</td>
+      <td class="text-sm hide-sm">${sn}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openStaffModal('${s.id}')">編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ==================== STORE CRUD ====================
+function openStoreModal(id){
+  const s=id?DB.get('stores').find(x=>x.id===id):null;
+  document.getElementById('stModalId').value=id||'';
+  document.getElementById('storeModalTitle').textContent=id?'店舗編集':'店舗追加';
+  document.getElementById('stModalName').value=s?s.name:'';
+  document.getElementById('stModalOpen').value=s?s.openTime:'09:00';
+  document.getElementById('stModalClose').value=s?s.closeTime:'21:00';
+  document.getElementById('storeModal').classList.remove('hidden');
+}
+function saveStore(){
+  const id=document.getElementById('stModalId').value;
+  const name=document.getElementById('stModalName').value.trim();
+  const open=document.getElementById('stModalOpen').value;
+  const close=document.getElementById('stModalClose').value;
+  if(!name){alert('店舗名を入力してください');return}
+  if(open>=close){alert('閉店時間は開店時間より後にしてください');return}
+  let stores=DB.get('stores');
+  if(id){
+    stores=stores.map(s=>s.id===id?{...s,name,openTime:open,closeTime:close}:s);
+  } else {
+    stores.push({id:uuid(),name,openTime:open,closeTime:close});
+  }
+  DB.set('stores',stores);
+  closeModal('storeModal');
+  renderStoreTable();
+}
+function deleteStore(id){
+  if(!confirm('この店舗を削除しますか？')) return;
+  DB.set('stores',DB.get('stores').filter(s=>s.id!==id));
+  renderStoreTable();
+}
+function renderStoreTable(){
+  const stores=DB.get('stores');
+  const tb=document.getElementById('storeTbody');
+  if(!stores.length){
+    tb.innerHTML='<tr><td colspan="4" class="text-muted" style="text-align:center;padding:20px;">店舗がありません</td></tr>';
+    return;
+  }
+  tb.innerHTML=stores.map(s=>`<tr>
+    <td class="fw6">${s.name}</td>
+    <td>${s.openTime}</td>
+    <td>${s.closeTime}</td>
+    <td>
+      <button class="btn btn-outline btn-sm" onclick="openStoreModal('${s.id}')">編集</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteStore('${s.id}')">削除</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ==================== STAFF CALENDAR ====================
+function sCalPrev(){ if(--sCalM<1){sCalM=12;sCalY--} renderStaffCal() }
+function sCalNext(){ if(++sCalM>12){sCalM=1;sCalY++} renderStaffCal() }
+
+function renderStaffCal(){
+  document.getElementById('sCalLabel').textContent=`${sCalY}年${sCalM}月`;
+  const avails=DB.get('availabilities').filter(a=>a.staffId===CU.staffId);
+  const shifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId);
+  const today=new Date();
+  let html=buildCal(sCalY,sCalM,(d,dow)=>{
+    const date=ds(sCalY,sCalM,d);
+    const avail=avails.find(a=>a.date===date);
+    const shift=shifts.find(s=>s.date===date);
+    const isToday=today.getFullYear()===sCalY&&today.getMonth()+1===sCalM&&today.getDate()===d;
+    let cls='cal-day';
+    if(shift) cls+=' has-shift';
+    else if(avail) cls+=' has-avail';
+    if(isToday) cls+=' today';
+    const color=dow===0?'color:var(--danger)':dow===6?'color:var(--primary)':'';
+    return `<div class="${cls}" onclick="openAvailModal('${date}')">
+      <div class="cal-num" style="${color}">${d}</div>
+      ${avail?`<div class="cal-tag">${avail.startTime}<br>${avail.endTime}</div>`:''}
+      ${shift?`<div class="cal-tag shift">✓確定<br>${shift.startTime}〜${shift.endTime}</div>`:''}
+    </div>`;
+  });
+  document.getElementById('sCal').innerHTML=html;
+}
+
+// ==================== AVAIL MODAL ====================
+function openAvailModal(date){
+  const [y,m,d]=date.split('-');
+  const dow=DAYS[new Date(+y,+m-1,+d).getDay()];
+  const avail=DB.get('availabilities').find(a=>a.staffId===CU.staffId&&a.date===date);
+  document.getElementById('availModalTitle').textContent=`${y}年${m}月${d}日(${dow})`;
+  document.getElementById('avModalDate').value=date;
+  document.getElementById('avStart').value=avail?avail.startTime:'09:00';
+  document.getElementById('avEnd').value=avail?avail.endTime:'17:00';
+  document.getElementById('avExisting').textContent=avail?`登録済: ${avail.startTime}〜${avail.endTime}`:'';
+  document.getElementById('avDeleteBtn').classList.toggle('hidden',!avail);
+  document.getElementById('availModal').classList.remove('hidden');
+}
+function saveAvail(){
+  const date=document.getElementById('avModalDate').value;
+  const start=document.getElementById('avStart').value;
+  const end=document.getElementById('avEnd').value;
+  if(start>=end){alert('終了時間は開始時間より後にしてください');return}
+  let avails=DB.get('availabilities').filter(a=>!(a.staffId===CU.staffId&&a.date===date));
+  avails.push({staffId:CU.staffId,date,startTime:start,endTime:end});
+  DB.set('availabilities',avails);
+  closeModal('availModal');
+  renderStaffCal();
+}
+function deleteAvail(){
+  if(!confirm('希望を削除しますか？')) return;
+  const date=document.getElementById('avModalDate').value;
+  DB.set('availabilities',DB.get('availabilities').filter(a=>!(a.staffId===CU.staffId&&a.date===date)));
+  closeModal('availModal');
+  renderStaffCal();
+}
+
+// ==================== STAFF HOURS ====================
+function renderHours(){
+  const staff=DB.get('staffs').find(s=>s.id===CU.staffId);
+  if(!staff) return;
+  const now=new Date();
+  const y=now.getFullYear(), m=now.getMonth()+1;
+  const prefix=`${y}-${String(m).padStart(2,'0')}`;
+  const shifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId&&s.date.startsWith(prefix));
+  const avails=DB.get('availabilities').filter(a=>a.staffId===CU.staffId&&a.date.startsWith(prefix));
+  const sh=shifts.reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
+  const ah=avails.reduce((sum,a)=>sum+calcH(a.startTime,a.endTime),0);
+  const pct=v=>Math.min(100,Math.round(v/staff.monthlyHourLimit*100));
+  const barCls=p=>p>=90?'danger':p>=70?'warn':'';
+  const ps=pct(sh), pa=pct(ah);
+  document.getElementById('hoursContent').innerHTML=`
+    <p class="text-muted text-sm mb3">${y}年${m}月</p>
+    <div style="padding:12px;background:var(--gray-50);border-radius:8px;margin-bottom:16px;">
+      <div class="text-sm"><strong>種別：</strong>${typeName(staff.type)}</div>
+      <div class="text-sm"><strong>月上限：</strong>${staff.monthlyHourLimit}時間</div>
+    </div>
+    <div class="mb4">
+      <div class="flex-between mb2 text-sm">
+        <span class="fw6">確定シフト時間</span>
+        <span><strong>${sh.toFixed(1)}h</strong> / ${staff.monthlyHourLimit}h</span>
+      </div>
+      <div class="progress"><div class="progress-bar ${barCls(ps)}" style="width:${ps}%"></div></div>
+      <div class="text-xs text-muted mt1">残り ${Math.max(0,staff.monthlyHourLimit-sh).toFixed(1)}時間</div>
+    </div>
+    <div>
+      <div class="flex-between mb2 text-sm">
+        <span>希望登録時間（参考）</span>
+        <span>${ah.toFixed(1)}h / ${staff.monthlyHourLimit}h</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width:${pa}%;opacity:.4;"></div></div>
+    </div>`;
+}
+
+// ==================== MY SHIFT ====================
+function renderMyShift(){
+  const now=new Date();
+  const y=now.getFullYear(), m=now.getMonth()+1;
+  const prefix=`${y}-${String(m).padStart(2,'0')}`;
+  const stores=DB.get('stores');
+  const shifts=DB.get('shifts').filter(s=>s.staffId===CU.staffId&&s.date.startsWith(prefix)).sort((a,b)=>a.date<b.date?-1:1);
+  const el=document.getElementById('myShiftContent');
+  if(!shifts.length){el.innerHTML='<p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがまだ確定していません</p>';return}
+  el.innerHTML=`<p class="text-muted text-sm mb3">${y}年${m}月</p>`+shifts.map(s=>{
+    const [sy,sm,sd]=s.date.split('-');
+    const dow=DAYS[new Date(+sy,+sm-1,+sd).getDay()];
+    const store=stores.find(x=>x.id===s.storeId);
+    const h=calcH(s.startTime,s.endTime);
+    return `<div class="flex-between" style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
+      <div>
+        <div class="text-sm fw6">${sm}/${sd}(${dow})</div>
+        <div class="text-xs text-muted">${store?store.name:'不明店舗'}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="text-sm">${s.startTime} 〜 ${s.endTime}</div>
+        <div class="text-xs text-muted">${h.toFixed(1)}時間</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ==================== ADMIN CALENDAR ====================
+function aCalPrev(){ if(--aCalM<1){aCalM=12;aCalY--} renderAdminCal() }
+function aCalNext(){ if(++aCalM>12){aCalM=1;aCalY++} renderAdminCal() }
+
+function renderAdminCal(){
+  document.getElementById('aCalLabel').textContent=`${aCalY}年${aCalM}月`;
+  const avails=DB.get('availabilities');
+  let html=buildCal(aCalY,aCalM,(d,dow)=>{
+    const date=ds(aCalY,aCalM,d);
+    const dayAvails=avails.filter(a=>a.date===date);
+    const color=dow===0?'color:var(--danger)':dow===6?'color:var(--primary)':'';
+    return `<div class="cal-day${dayAvails.length?' has-avail':''}" onclick="showReqDetail('${date}')">
+      <div class="cal-num" style="${color}">${d}</div>
+      ${dayAvails.length?`<div class="cal-tag">${dayAvails.length}名</div>`:''}
+    </div>`;
+  });
+  document.getElementById('aCal').innerHTML=html;
+}
+function showReqDetail(date){
+  const [y,m,d]=date.split('-');
+  const dow=DAYS[new Date(+y,+m-1,+d).getDay()];
+  const avails=DB.get('availabilities').filter(a=>a.date===date);
+  const staffs=DB.get('staffs'), stores=DB.get('stores');
+  document.getElementById('reqModalTitle').textContent=`${y}年${m}月${d}日(${dow}) 希望一覧`;
+  document.getElementById('reqModalContent').innerHTML=avails.length===0
+    ?'<p class="text-muted text-sm">希望登録なし</p>'
+    :avails.map(a=>{
+      const s=staffs.find(x=>x.id===a.staffId);
+      if(!s) return '';
+      const sn=(s.assignedStores||[]).map(id=>{const st=stores.find(x=>x.id===id);return st?st.name:''}).filter(Boolean).join(', ')||'店舗未設定';
+      return `<div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--gray-100);">
+        <div><div class="text-sm fw6">${s.name} ${typeBadge(s.type)}</div><div class="text-xs text-muted">${sn}</div></div>
+        <div class="text-sm">${a.startTime}〜${a.endTime}</div>
+      </div>`;
+    }).join('');
+  document.getElementById('reqModal').classList.remove('hidden');
+}
+
+// ==================== GENERATE ====================
+function genPrev(){ if(--genM<1){genM=12;genY--} renderGenTab() }
+function genNext(){ if(++genM>12){genM=1;genY++} renderGenTab() }
+
+function renderGenTab(){
+  document.getElementById('genLabel').textContent=`${genY}年${genM}月`;
+  const prefix=`${genY}-${String(genM).padStart(2,'0')}`;
+  const cnt=DB.get('shifts').filter(s=>s.date.startsWith(prefix)).length;
+  document.getElementById('genResult').innerHTML=cnt
+    ?`<div style="padding:12px;background:var(--success-light);border-radius:8px;"><span class="text-success fw6">✓ ${cnt}件のシフトが作成済みです</span></div>`
+    :'<p class="text-muted text-sm">シフトはまだ作成されていません。</p>';
+}
+
+function generateShifts(){
+  const stores=DB.get('stores'), staffs=DB.get('staffs');
+  const prefix=`${genY}-${String(genM).padStart(2,'0')}`;
+  const avails=DB.get('availabilities').filter(a=>a.date.startsWith(prefix));
+
+  if(!stores.length){alert('店舗を先に登録してください');return}
+  if(!staffs.length){alert('スタッフを先に登録してください');return}
+  if(!avails.length){alert('この月の出勤希望が登録されていません');return}
+  if(!confirm(`${genY}年${genM}月のシフトを自動作成します。\n既存のシフトは上書きされます。\nよろしいですか？`)) return;
+
+  // Remove existing shifts for this month
+  let allShifts=DB.get('shifts').filter(s=>!s.date.startsWith(prefix));
+
+  // Monthly hour tracker
+  const hoursUsed={};
+  staffs.forEach(s=>hoursUsed[s.id]=0);
+
+  const newShifts=[];
+  const days=daysInMonth(genY,genM);
+
+  for(let d=1;d<=days;d++){
+    const date=ds(genY,genM,d);
+    const dayAvails=avails.filter(a=>a.date===date);
+    if(!dayAvails.length) continue;
+
+    for(const store of stores){
+      const stOpen=toMins(store.openTime);
+      const stClose=toMins(store.closeTime);
+
+      // Get candidates: staff assigned to this store with availability today
+      const candidates=dayAvails
+        .map(a=>{
+          const staff=staffs.find(s=>s.id===a.staffId);
+          if(!staff) return null;
+          if(!(staff.assignedStores||[]).includes(store.id)) return null;
+          // Clip to store hours
+          const start=Math.max(toMins(a.startTime),stOpen);
+          const end=Math.min(toMins(a.endTime),stClose);
+          const hours=(end-start)/60;
+          if(hours<=0) return null;
+          return{staffId:staff.id,staff,start,end,hours,origStart:toMins(a.startTime),origEnd:toMins(a.endTime)};
+        })
+        .filter(Boolean)
+        .sort((a,b)=>a.start-b.start);
+
+      if(!candidates.length) continue;
+
+      // Greedy interval cover: cover [stOpen, stClose]
+      let covered=stOpen;
+      const used=new Set();
+
+      // Safety: max 3 passes to handle overlapping coverage
+      for(let pass=0;pass<candidates.length;pass++){
+        if(covered>=stClose) break;
+
+        // Find best: starts at or before covered+slack, extends furthest, within limit
+        const eligible=candidates.filter(c=>{
+          if(used.has(c.staffId)) return false;
+          const remaining=c.staff.monthlyHourLimit-hoursUsed[c.staffId];
+          if(c.hours>remaining+0.01) return false;
+          return c.start<=covered+60; // allow up to 60min gap (flexible)
+        });
+
+        if(!eligible.length) break;
+
+        // Pick the one that covers furthest
+        eligible.sort((a,b)=>b.end-a.end);
+        const chosen=eligible[0];
+
+        newShifts.push({
+          id:uuid(),
+          staffId:chosen.staffId,
+          storeId:store.id,
+          date,
+          startTime:fromMins(chosen.start),
+          endTime:fromMins(chosen.end),
+        });
+
+        hoursUsed[chosen.staffId]+=chosen.hours;
+        used.add(chosen.staffId);
+        covered=Math.max(covered,chosen.end);
+      }
+    }
+  }
+
+  allShifts=allShifts.concat(newShifts);
+  DB.set('shifts',allShifts);
+
+  // Summary
+  const summaryItems=staffs
+    .map(s=>({s,h:hoursUsed[s.id]||0}))
+    .filter(x=>x.h>0)
+    .map(({s,h})=>{
+      const pct=Math.min(100,Math.round(h/s.monthlyHourLimit*100));
+      const cls=pct>=90?'danger':pct>=70?'warn':'';
+      return `<div style="margin-bottom:10px;">
+        <div class="flex-between text-sm mb2">
+          <span>${s.name} ${typeBadge(s.type)}</span>
+          <span>${h.toFixed(1)}h / ${s.monthlyHourLimit}h</span>
+        </div>
+        <div class="progress"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+  document.getElementById('genResult').innerHTML=`
+    <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:16px;">
+      <div class="text-success fw6">✓ シフトを作成しました</div>
+      <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
+    </div>
+    ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
+  `;
+}
+
+// ==================== SHIFT TABLE ====================
+function tblPrev(){ if(--tblM<1){tblM=12;tblY--} renderShiftTable() }
+function tblNext(){ if(++tblM>12){tblM=1;tblY++} renderShiftTable() }
+
+function fillTblStoreSel(){
+  const stores=DB.get('stores');
+  const sel=document.getElementById('tblStoreSel');
+  sel.innerHTML='<option value="all">全店舗</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+function renderShiftTable(){
+  document.getElementById('tblLabel').textContent=`${tblY}年${tblM}月`;
+  const storeFilter=document.getElementById('tblStoreSel').value;
+  const stores=DB.get('stores');
+  const staffs=DB.get('staffs');
+  const prefix=`${tblY}-${String(tblM).padStart(2,'0')}`;
+  const allShifts=DB.get('shifts').filter(s=>s.date.startsWith(prefix));
+  const filteredStores=storeFilter==='all'?stores:stores.filter(s=>s.id===storeFilter);
+  const days=daysInMonth(tblY,tblM);
+
+  if(!filteredStores.length){
+    document.getElementById('tblArea').innerHTML='<div class="card"><p class="text-muted text-sm">店舗がありません</p></div>';
+    return;
+  }
+
+  let html='';
+  for(const store of filteredStores){
+    const storeShifts=allShifts.filter(s=>s.storeId===store.id);
+    // Get staff who have shifts at this store
+    const activeStaffIds=[...new Set(storeShifts.map(s=>s.staffId))];
+    const activeStaffs=staffs.filter(s=>activeStaffIds.includes(s.id));
+
+    // Day headers
+    const dayHeaders=Array.from({length:days},(_,i)=>{
+      const d=i+1, dow=new Date(tblY,tblM-1,d).getDay();
+      const color=dow===0?'color:var(--danger)':dow===6?'color:var(--primary)':'';
+      return `<th style="${color}">${d}<br><span style="font-weight:400">${DAYS[dow]}</span></th>`;
+    }).join('');
+
+    const rows=activeStaffs.map(staff=>{
+      const cells=Array.from({length:days},(_,i)=>{
+        const d=i+1, date=ds(tblY,tblM,d);
+        const shift=storeShifts.find(s=>s.staffId===staff.id&&s.date===date);
+        if(!shift) return '<td></td>';
+        return `<td><div class="sft-cell">${shift.startTime}<br>${shift.endTime}</div></td>`;
+      }).join('');
+      const totalH=storeShifts.filter(s=>s.staffId===staff.id).reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
+      return `<tr><td class="sft-name">${staff.name}</td>${cells}<td class="fw6">${totalH.toFixed(1)}h</td></tr>`;
+    }).join('');
+
+    html+=`<div class="card" style="overflow:hidden;">
+      <div class="card-title">${store.name}（${store.openTime}〜${store.closeTime}）</div>
+      ${!activeStaffs.length?'<p class="text-muted text-sm">シフトがありません</p>':`
+      <div class="tbl-wrap">
+        <table class="sft-table">
+          <thead><tr><th class="sft-name">スタッフ</th>${dayHeaders}<th>合計</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`}
+    </div>`;
+  }
+  if(!html) html='<div class="card"><p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがありません。先にシフト作成タブで自動作成してください。</p></div>';
+  document.getElementById('tblArea').innerHTML=html;
+}
+
+// ==================== CALENDAR BUILDER ====================
+function buildCal(y,m,dayFn){
+  const dow=['日','月','火','水','木','金','土'];
+  let html='<div class="cal-grid">';
+  dow.forEach((d,i)=>{
+    const c=i===0?'color:var(--danger)':i===6?'color:var(--primary)':'';
+    html+=`<div class="cal-dh" style="${c}">${d}</div>`;
+  });
+  const first=firstDow(y,m), days=daysInMonth(y,m);
+  for(let i=0;i<first;i++) html+='<div class="cal-day empty"></div>';
+  for(let d=1;d<=days;d++){
+    const dow2=new Date(y,m-1,d).getDay();
+    html+=dayFn(d,dow2);
+  }
+  html+='</div>';
+  return html;
+}
+
+// ==================== MODAL HELPERS ====================
+function closeModal(id){ document.getElementById(id).classList.add('hidden') }
+function overlayClose(e,id){ if(e.target.id===id) closeModal(id) }
+
+// ==================== INIT ====================
+window.addEventListener('DOMContentLoaded',()=>{
+  // Init admin password
+  const cfg=DB.getObj('cfg');
+  if(!cfg.pw) DB.setObj('cfg',{...cfg,pw:DEFAULT_PW});
+});
+</script>
+</body>
+</html>
