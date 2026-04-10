@@ -247,6 +247,7 @@ tr:last-child td{border-bottom:none}
         <button class="tab" id="atab-gen" onclick="switchAdminTab('gen')">⚡ シフト作成</button>
         <button class="tab" id="atab-tbl" onclick="switchAdminTab('tbl')">📊 シフト表</button>
         <button class="tab" id="atab-notice" onclick="switchAdminTab('notice')">🔔 お知らせ</button>
+        <button class="tab" id="atab-help" onclick="switchAdminTab('help')">❓ 使い方</button>
       </div>
 
       <!-- スタッフ管理 -->
@@ -337,6 +338,85 @@ tr:last-child td{border-bottom:none}
             <button class="btn btn-primary btn-sm" onclick="openNoticeModal()">＋ 作成</button>
           </div>
           <div id="noticeAdminList"></div>
+        </div>
+      </div>
+
+      <!-- 使い方 -->
+      <div id="atab-help-c" class="hidden">
+        <div class="card">
+          <div class="card-title">❓ 使い方ガイド</div>
+          <div style="font-size:.875rem;line-height:1.8;color:var(--gray-700);">
+
+            <div style="background:var(--primary-light);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+              <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">📋 基本的な流れ</div>
+              <ol style="padding-left:1.2em;line-height:2;">
+                <li>店舗を登録する</li>
+                <li>スタッフを登録し、対応店舗・月上限時間を設定する</li>
+                <li>スタッフが各自ログインして出勤希望を登録する</li>
+                <li>管理者が「シフト作成」で自動作成する</li>
+                <li>「シフト表」で確認・手動調整する</li>
+                <li>印刷またはPDF出力する</li>
+              </ol>
+            </div>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">👤 スタッフ管理</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.82rem;">
+              <tr style="background:var(--gray-50);"><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">操作</th><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">説明</th></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">＋ 追加</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">名前・種別・月上限時間・対応店舗・初期パスワードを設定して登録</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">編集</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">情報を変更。パスワードは空欄のままにすると変更されない</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">PW初期化</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">スタッフがパスワードを忘れた場合に管理者がリセット</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">削除</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">退職等でスタッフを削除。削除するとシフト履歴も消えます</td></tr>
+            </table>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">🏪 店舗管理</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.82rem;">
+              <tr style="background:var(--gray-50);"><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">項目</th><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">説明</th></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">開店・閉店時間</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">この範囲内でシフトが自動的に割り当てられます</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">必要社員数／日</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">シフト作成時に社員を優先して入れる人数。不足時はアルバイト・パートで補います</td></tr>
+            </table>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">⚡ シフト自動作成のルール</div>
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem;">
+              <ul style="padding-left:1.2em;line-height:2.2;">
+                <li><strong>社員優先</strong>：各店舗の「必要社員数」を先に埋め、不足分をアルバイト・パートで補います</li>
+                <li><strong>4連勤禁止</strong>：3日連続出勤の翌日は自動でスキップ（最低2人確保時は一時緩和）</li>
+                <li><strong>月上限厳守</strong>：各スタッフの月上限時間を超えません</li>
+                <li><strong>アルバイト週20h以内</strong>：月曜〜日曜で20時間を超えないよう調整</li>
+                <li><strong>アルバイト月85h以内</strong>：設定値と85hの小さい方が上限</li>
+                <li><strong>最低2人・最大人数</strong>：平日3人・土日4人まで配置（最低2人確保を優先）</li>
+                <li><strong>重複2時間以内</strong>：スタッフ同士の勤務が2時間以上かぶらないよう配置</li>
+              </ul>
+            </div>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">📊 シフト表の見方・操作</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:.82rem;">
+              <tr style="background:var(--gray-50);"><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">表示</th><th style="padding:7px 10px;text-align:left;border:1px solid var(--gray-200);">意味</th></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);background:#fee2e2;">赤背景の日付</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">出勤人数が2人未満。手動で追加が必要</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">日付をクリック</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">その日のシフトを手動調整（追加・変更・削除）できます</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">溢れ行（赤）</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">希望を出したが入れなかったスタッフ。セルにカーソルで希望時間と理由を確認できます</td></tr>
+              <tr><td style="padding:7px 10px;border:1px solid var(--gray-200);">🖨️ 印刷・PDF</td><td style="padding:7px 10px;border:1px solid var(--gray-200);">印刷ダイアログが開きます。PDFに保存も選択できます</td></tr>
+            </table>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">🔔 お知らせ機能</div>
+            <div style="background:var(--gray-50);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem;">
+              <ul style="padding-left:1.2em;line-height:2.2;">
+                <li>管理者が作成したお知らせは全スタッフに配信されます</li>
+                <li>スタッフのタブに未読件数が表示されます</li>
+                <li><strong>自動通知</strong>：毎月15日以降、当月の希望未提出スタッフがログインすると自動でお知らせが届きます</li>
+                <li>掲載期限を設定すると、期限後は自動的に非表示になります</li>
+              </ul>
+            </div>
+
+            <div style="font-weight:700;color:var(--gray-800);margin-bottom:8px;font-size:.95rem;">🔑 パスワードについて</div>
+            <div style="background:var(--warning-light);border-radius:8px;padding:12px 16px;font-size:.82rem;">
+              <ul style="padding-left:1.2em;line-height:2.2;">
+                <li>管理者パスワード初期値：<strong>admin1234</strong>（ログイン後に変更を推奨）</li>
+                <li>スタッフは初回ログイン後に「パスワード変更」タブから自分で変更できます</li>
+                <li>スタッフがパスワードを忘れた場合はスタッフ一覧の「編集」→「PW初期化」で対応してください</li>
+              </ul>
+            </div>
+
+          </div>
         </div>
       </div>
 
@@ -584,7 +664,7 @@ function switchStaffTab(t){
   if(t==='notice') renderStaffNotices();
 }
 function switchAdminTab(t){
-  ['staff','store','req','gen','tbl','notice'].forEach(x=>{
+  ['staff','store','req','gen','tbl','notice','help'].forEach(x=>{
     document.getElementById('atab-'+x+'-c').classList.toggle('hidden',x!==t);
     document.getElementById('atab-'+x).classList.toggle('active',x===t);
   });
