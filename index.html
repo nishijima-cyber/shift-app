@@ -136,9 +136,15 @@ tr:last-child td{border-bottom:none}
     <label class="form-label">管理者パスワード</label>
     <input type="password" class="form-input" id="adminPw" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')doLogin()">
   </div>
-  <div id="staffArea" class="hidden form-group">
-    <label class="form-label">名前を選択</label>
-    <select class="form-select" id="staffSel"></select>
+  <div id="staffArea" class="hidden">
+    <div class="form-group">
+      <label class="form-label">名前を選択</label>
+      <select class="form-select" id="staffSel"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">パスワード</label>
+      <input type="password" class="form-input" id="staffPw" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
   </div>
   <button class="btn btn-primary btn-block" onclick="doLogin()">ログイン</button>
   <p id="loginErr" class="text-danger text-sm hidden" style="margin-top:8px;"></p>
@@ -163,6 +169,7 @@ tr:last-child td{border-bottom:none}
         <button class="tab active" id="stab-avail" onclick="switchStaffTab('avail')">📆 希望登録</button>
         <button class="tab" id="stab-hours" onclick="switchStaffTab('hours')">⏱ 時間確認</button>
         <button class="tab" id="stab-myshift" onclick="switchStaffTab('myshift')">✅ 自分のシフト</button>
+        <button class="tab" id="stab-pw" onclick="switchStaffTab('pw')">🔑 パスワード変更</button>
       </div>
 
       <!-- 希望登録 -->
@@ -199,6 +206,27 @@ tr:last-child td{border-bottom:none}
           <div id="myShiftContent"></div>
         </div>
       </div>
+
+      <!-- パスワード変更 -->
+      <div id="stab-pw-c" class="hidden">
+        <div class="card">
+          <div class="card-title">パスワード変更</div>
+          <div class="form-group">
+            <label class="form-label">現在のパスワード</label>
+            <input type="password" class="form-input" id="pwCurrent" placeholder="現在のパスワード">
+          </div>
+          <div class="form-group">
+            <label class="form-label">新しいパスワード</label>
+            <input type="password" class="form-input" id="pwNew" placeholder="新しいパスワード（4文字以上）">
+          </div>
+          <div class="form-group">
+            <label class="form-label">新しいパスワード（確認）</label>
+            <input type="password" class="form-input" id="pwConfirm" placeholder="もう一度入力">
+          </div>
+          <p id="pwMsg" class="text-sm hidden" style="margin-bottom:10px;"></p>
+          <button class="btn btn-primary" onclick="changeStaffPw()">パスワードを変更</button>
+        </div>
+      </div>
     </div>
 
     <!-- ADMIN VIEW -->
@@ -219,7 +247,7 @@ tr:last-child td{border-bottom:none}
             <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 追加</button>
           </div>
           <div class="tbl-wrap">
-            <table><thead><tr><th>名前</th><th>種別</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>操作</th></tr></thead>
+            <table><thead><tr><th>名前</th><th>種別</th><th>月上限</th><th class="hide-sm">対応店舗</th><th>PW</th><th>操作</th></tr></thead>
             <tbody id="staffTbody"></tbody></table>
           </div>
         </div>
@@ -322,8 +350,14 @@ tr:last-child td{border-bottom:none}
     <label class="form-label">対応店舗（複数選択可）</label>
     <div id="sModalStores" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;"></div>
   </div>
+  <div class="form-group" id="sModalPwGroup">
+    <label class="form-label">初期パスワード</label>
+    <input type="password" class="form-input" id="sModalPw" placeholder="4文字以上（編集時は空欄で変更なし）">
+    <div class="text-xs text-muted mt1">スタッフが初回ログイン後に自分で変更できます</div>
+  </div>
   <div class="modal-footer">
     <button class="btn btn-outline" onclick="closeModal('staffModal')">キャンセル</button>
+    <button class="btn btn-danger btn-sm" id="sModalResetPwBtn" onclick="resetStaffPw()" style="display:none;">PW初期化</button>
     <button class="btn btn-primary" onclick="saveStaff()">保存</button>
   </div>
 </div>
@@ -441,6 +475,9 @@ function doLogin(){
     if(!id){ showErr('スタッフを選択してください'); return }
     const s=DB.get('staffs').find(x=>x.id===id);
     if(!s){ showErr('スタッフが見つかりません'); return }
+    if(!s.pw){ showErr('パスワードが設定されていません。管理者に連絡してください。'); return }
+    const pw=document.getElementById('staffPw').value;
+    if(pw!==s.pw){ showErr('パスワードが正しくありません'); return }
     CU={role:'staff',staffId:id,name:s.name};
   }
   const now=new Date();
@@ -471,11 +508,12 @@ function doLogout(){
   document.getElementById('adminArea').classList.add('hidden');
   document.getElementById('staffArea').classList.add('hidden');
   document.getElementById('adminPw').value='';
+  document.getElementById('staffPw').value='';
 }
 
 // ==================== TABS ====================
 function switchStaffTab(t){
-  ['avail','hours','myshift'].forEach(x=>{
+  ['avail','hours','myshift','pw'].forEach(x=>{
     document.getElementById('stab-'+x+'-c').classList.toggle('hidden',x!==t);
     document.getElementById('stab-'+x).classList.toggle('active',x===t);
   });
@@ -503,6 +541,9 @@ function openStaffModal(id){
   document.getElementById('sModalName').value=s?s.name:'';
   document.getElementById('sModalType').value=s?s.type:'employee';
   document.getElementById('sModalLimit').value=s?s.monthlyHourLimit:160;
+  document.getElementById('sModalPw').value='';
+  document.getElementById('sModalPw').placeholder=id?'変更する場合のみ入力':'初期パスワード（4文字以上）';
+  document.getElementById('sModalResetPwBtn').style.display=id?'':'none';
   const div=document.getElementById('sModalStores');
   div.innerHTML=stores.length===0
     ?'<span class="text-muted text-sm">先に店舗を登録してください</span>'
@@ -517,17 +558,34 @@ function saveStaff(){
   const type=document.getElementById('sModalType').value;
   const limit=parseInt(document.getElementById('sModalLimit').value);
   const stores=[...document.querySelectorAll('#sModalStores input:checked')].map(el=>el.value);
+  const newPw=document.getElementById('sModalPw').value;
   if(!name){alert('名前を入力してください');return}
   if(!limit||limit<1){alert('月上限時間を入力してください');return}
+  if(!id&&!newPw){alert('初期パスワードを入力してください');return}
+  if(newPw&&newPw.length<4){alert('パスワードは4文字以上にしてください');return}
   let staffs=DB.get('staffs');
   if(id){
-    staffs=staffs.map(s=>s.id===id?{...s,name,type,monthlyHourLimit:limit,assignedStores:stores}:s);
+    staffs=staffs.map(s=>{
+      if(s.id!==id) return s;
+      return {...s,name,type,monthlyHourLimit:limit,assignedStores:stores,...(newPw?{pw:newPw}:{})};
+    });
   } else {
-    staffs.push({id:uuid(),name,type,monthlyHourLimit:limit,assignedStores:stores});
+    staffs.push({id:uuid(),name,type,monthlyHourLimit:limit,assignedStores:stores,pw:newPw});
   }
   DB.set('staffs',staffs);
   closeModal('staffModal');
   renderStaffTable();
+}
+function resetStaffPw(){
+  const id=document.getElementById('sModalId').value;
+  if(!id) return;
+  const newPw=prompt('新しいパスワードを入力（4文字以上）');
+  if(!newPw) return;
+  if(newPw.length<4){alert('パスワードは4文字以上にしてください');return}
+  let staffs=DB.get('staffs');
+  staffs=staffs.map(s=>s.id===id?{...s,pw:newPw}:s);
+  DB.set('staffs',staffs);
+  alert('パスワードをリセットしました。');
 }
 function deleteStaff(id){
   if(!confirm('このスタッフを削除しますか？')) return;
@@ -538,16 +596,18 @@ function renderStaffTable(){
   const staffs=DB.get('staffs'), stores=DB.get('stores');
   const tb=document.getElementById('staffTbody');
   if(!staffs.length){
-    tb.innerHTML='<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">スタッフがいません</td></tr>';
+    tb.innerHTML='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">スタッフがいません</td></tr>';
     return;
   }
   tb.innerHTML=staffs.map(s=>{
     const sn=(s.assignedStores||[]).map(id=>{const st=stores.find(x=>x.id===id);return st?st.name:''}).filter(Boolean).join(', ')||'—';
+    const pwStatus=s.pw?'<span class="badge badge-green">設定済</span>':'<span class="badge" style="background:#fee2e2;color:#991b1b;">未設定</span>';
     return `<tr>
       <td class="fw6">${s.name}</td>
       <td>${typeBadge(s.type)}</td>
       <td>${s.monthlyHourLimit}h</td>
       <td class="text-sm hide-sm">${sn}</td>
+      <td>${pwStatus}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="openStaffModal('${s.id}')">編集</button>
         <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">削除</button>
@@ -704,6 +764,27 @@ function renderHours(){
 }
 
 // ==================== MY SHIFT ====================
+function changeStaffPw(){
+  const cur=document.getElementById('pwCurrent').value;
+  const nw=document.getElementById('pwNew').value;
+  const conf=document.getElementById('pwConfirm').value;
+  const msg=document.getElementById('pwMsg');
+  msg.className='text-sm';
+  const s=DB.get('staffs').find(x=>x.id===CU.staffId);
+  if(!s){msg.textContent='エラーが発生しました';msg.classList.add('text-danger','hidden'.replace('hidden',''));return}
+  if(cur!==s.pw){msg.textContent='現在のパスワードが正しくありません';msg.classList.remove('hidden');msg.classList.add('text-danger');return}
+  if(nw.length<4){msg.textContent='新しいパスワードは4文字以上にしてください';msg.classList.remove('hidden');msg.classList.add('text-danger');return}
+  if(nw!==conf){msg.textContent='新しいパスワードが一致しません';msg.classList.remove('hidden');msg.classList.add('text-danger');return}
+  let staffs=DB.get('staffs');
+  staffs=staffs.map(x=>x.id===CU.staffId?{...x,pw:nw}:x);
+  DB.set('staffs',staffs);
+  document.getElementById('pwCurrent').value='';
+  document.getElementById('pwNew').value='';
+  document.getElementById('pwConfirm').value='';
+  msg.textContent='パスワードを変更しました';
+  msg.classList.remove('hidden','text-danger');
+  msg.classList.add('text-success');
+}
 function renderMyShift(){
   const now=new Date();
   const y=now.getFullYear(), m=now.getMonth()+1;
