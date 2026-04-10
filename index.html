@@ -486,6 +486,13 @@ tr:last-child td{border-bottom:none}
     </select>
   </div>
   <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+      <input type="checkbox" id="sModalManager" style="width:16px;height:16px;cursor:pointer;">
+      <span style="font-size:.875rem;font-weight:500;color:var(--gray-700);">👑 店長</span>
+    </label>
+    <div class="text-xs text-muted mt1">シフト表・スタッフ一覧に店長マークが表示されます</div>
+  </div>
+  <div class="form-group">
     <label class="form-label">勤務ステータス</label>
     <select class="form-select" id="sModalStatus">
       <option value="active">在籍中</option>
@@ -760,6 +767,7 @@ function openStaffModal(id){
   document.getElementById('staffModalTitle').textContent=id?'スタッフ編集':'スタッフ追加';
   document.getElementById('sModalName').value=s?s.name:'';
   document.getElementById('sModalType').value=s?s.type:'employee';
+  document.getElementById('sModalManager').checked=s?!!s.isManager:false;
   document.getElementById('sModalStatus').value=s?s.status||'active':'active';
   document.getElementById('sModalLimit').value=s?s.monthlyHourLimit:160;
   document.getElementById('sModalPw').value='';
@@ -777,6 +785,7 @@ function saveStaff(){
   const id=document.getElementById('sModalId').value;
   const name=document.getElementById('sModalName').value.trim();
   const type=document.getElementById('sModalType').value;
+  const isManager=document.getElementById('sModalManager').checked;
   const status=document.getElementById('sModalStatus').value;
   const limit=parseInt(document.getElementById('sModalLimit').value);
   const stores=[...document.querySelectorAll('#sModalStores input:checked')].map(el=>el.value);
@@ -789,10 +798,10 @@ function saveStaff(){
   if(id){
     staffs=staffs.map(s=>{
       if(s.id!==id) return s;
-      return {...s,name,type,status,monthlyHourLimit:limit,assignedStores:stores,...(newPw?{pw:newPw}:{})};
+      return {...s,name,type,isManager,status,monthlyHourLimit:limit,assignedStores:stores,...(newPw?{pw:newPw}:{})};
     });
   } else {
-    staffs.push({id:uuid(),name,type,status,monthlyHourLimit:limit,assignedStores:stores,pw:newPw});
+    staffs.push({id:uuid(),name,type,isManager,status,monthlyHourLimit:limit,assignedStores:stores,pw:newPw});
   }
   DB.set('staffs',staffs);
   closeModal('staffModal');
@@ -831,7 +840,7 @@ function renderStaffTable(){
     const pwStatus=s.pw?'<span class="badge badge-green">設定済</span>':'<span class="badge" style="background:#fee2e2;color:#991b1b;">未設定</span>';
     const rowStyle=isOnLeave(s)?'opacity:.55;background:#faf5ff;':'';
     return `<tr style="${rowStyle}">
-      <td class="fw6">${s.name}</td>
+      <td class="fw6">${s.isManager?'<span title="店長" style="font-size:.9rem;">👑</span> ':''}${s.name}</td>
       <td>${typeBadge(s.type)}</td>
       <td>${statusBadge(s.status)||'<span class="badge badge-green">在籍中</span>'}</td>
       <td>${s.monthlyHourLimit}h</td>
@@ -1397,7 +1406,7 @@ function renderShiftTable(){
         </td>`;
       }).join('');
       const totalH=storeShifts.filter(s=>s.staffId===staff.id).reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
-      return `<tr><td class="sft-name">${staff.name}</td>${cells}<td class="fw6">${totalH.toFixed(1)}h</td></tr>`;
+      return `<tr><td class="sft-name">${staff.isManager?'👑 ':''}${staff.name}</td>${cells}<td class="fw6">${totalH.toFixed(1)}h</td></tr>`;
     }).join('');
 
     // 合計行（日ごとの人数）
@@ -1514,7 +1523,7 @@ function renderAdjModal(){
     if(shift){
       return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);flex-wrap:wrap;">
         <div style="flex:1;min-width:120px;">
-          <div class="text-sm fw6">${staff.name}</div>
+          <div class="text-sm fw6">${staff.isManager?'👑 ':''}${staff.name}</div>
           <div class="text-xs text-muted">${availTxt}</div>
         </div>
         <input type="time" value="${shift.startTime}" id="adj-s-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
@@ -1528,7 +1537,7 @@ function renderAdjModal(){
       const defE=avail?avail.endTime:(store?store.closeTime:'17:00');
       return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);flex-wrap:wrap;opacity:.7;">
         <div style="flex:1;min-width:120px;">
-          <div class="text-sm fw6">${staff.name}</div>
+          <div class="text-sm fw6">${staff.isManager?'👑 ':''}${staff.name}</div>
           <div class="text-xs text-muted">${availTxt}</div>
         </div>
         <input type="time" value="${defS}" id="adj-s-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
