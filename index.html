@@ -430,6 +430,17 @@ tr:last-child td{border-bottom:none}
 </div>
 </div>
 
+<!-- Adjust Modal -->
+<div id="adjModal" class="modal-overlay hidden" onclick="overlayClose(event,'adjModal')">
+<div class="modal" style="max-width:560px;">
+  <div class="modal-title" id="adjModalTitle">シフト調整</div>
+  <div id="adjModalBody"></div>
+  <div class="modal-footer">
+    <button class="btn btn-outline" onclick="closeModal('adjModal')">閉じる</button>
+  </div>
+</div>
+</div>
+
 <!-- Notice Modal -->
 <div id="noticeModal" class="modal-overlay hidden" onclick="overlayClose(event,'noticeModal')">
 <div class="modal">
@@ -992,30 +1003,32 @@ function generateShifts(){
 
       let covered=stOpen;
       const used=new Set();
+      let assignedCount=0;
+
+      // ルールチェック（最低2人確保のため、2人未満なら4連勤チェックを緩和して再試行）
+      function isEligible(c, relaxConsecutive){
+        if(used.has(c.staffId)) return false;
+        const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
+        if(c.hours>remaining+0.01) return false;
+        if(!relaxConsecutive&&!workedToday.has(c.staffId)){
+          if(getConsecutive(c.staffId,d)>=3) return false;
+        }
+        if(c.staff.type==='parttime'){
+          const wkUsed=weeklyHours[c.staffId][wk]||0;
+          if(wkUsed+c.hours>20+0.01) return false;
+        }
+        return c.start<=covered+60;
+      }
 
       for(let pass=0;pass<candidates.length;pass++){
         if(covered>=stClose) break;
 
-        const eligible=candidates.filter(c=>{
-          if(used.has(c.staffId)) return false;
-
-          // ① 月上限チェック
-          const remaining=monthLimit(c.staff)-hoursUsed[c.staffId];
-          if(c.hours>remaining+0.01) return false;
-
-          // ② 4連勤禁止（今日まだ出勤していない場合のみチェック）
-          if(!workedToday.has(c.staffId)){
-            if(getConsecutive(c.staffId,d)>=3) return false;
-          }
-
-          // ③ アルバイト：週20h以内
-          if(c.staff.type==='parttime'){
-            const wkUsed=weeklyHours[c.staffId][wk]||0;
-            if(wkUsed+c.hours>20+0.01) return false;
-          }
-
-          return c.start<=covered+60;
-        });
+        // 最低2人未満ならルール緩和（4連勤チェックを外す）
+        const relax=assignedCount<2;
+        let eligible=candidates.filter(c=>isEligible(c,false));
+        if(eligible.length===0&&relax){
+          eligible=candidates.filter(c=>isEligible(c,true));
+        }
 
         if(!eligible.length) break;
 
@@ -1035,6 +1048,7 @@ function generateShifts(){
         weeklyHours[chosen.staffId][wk]=(weeklyHours[chosen.staffId][wk]||0)+chosen.hours;
         workedToday.add(chosen.staffId);
         used.add(chosen.staffId);
+        assignedCount++;
         covered=Math.max(covered,chosen.end);
       }
     }
@@ -1061,12 +1075,29 @@ function generateShifts(){
       </div>`;
     }).join('');
 
+  // 2人未満の日を検出
+  const stores2=DB.get('stores');
+  const shortDays=[];
+  for(let d=1;d<=days;d++){
+    const date=ds(genY,genM,d);
+    for(const store of stores2){
+      const cnt=newShifts.filter(s=>s.date===date&&s.storeId===store.id).length;
+      if(cnt>0&&cnt<2) shortDays.push(`${genM}/${d} ${store.name}（${cnt}人）`);
+    }
+  }
+  const shortWarn=shortDays.length
+    ?`<div style="padding:10px 12px;background:#fee2e2;border-radius:8px;margin-bottom:12px;">
+        <div style="color:var(--danger);font-weight:600;font-size:.85rem;">⚠ 2人未満の日があります（シフト表タブで手動調整してください）</div>
+        <div style="font-size:.78rem;color:var(--danger);margin-top:4px;">${shortDays.join('、')}</div>
+      </div>`:'';
+
   document.getElementById('genResult').innerHTML=`
-    <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:16px;">
+    <div style="padding:14px;background:var(--success-light);border-radius:8px;margin-bottom:12px;">
       <div class="text-success fw6">✓ シフトを作成しました</div>
       <div class="text-sm mt1">${newShifts.length}件のシフトを生成</div>
-      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内</div>
+      <div class="text-xs text-muted mt1">適用ルール：4連勤禁止 ／ アルバイト週20h以内・月85h以内 ／ 最低2人優先</div>
     </div>
+    ${shortWarn}
     ${summaryItems?`<div class="fw6 text-sm mb3">スタッフ別集計</div>${summaryItems}`:''}
   `;
 }
@@ -1099,41 +1130,155 @@ function renderShiftTable(){
   let html='';
   for(const store of filteredStores){
     const storeShifts=allShifts.filter(s=>s.storeId===store.id);
-    // Get staff who have shifts at this store
-    const activeStaffIds=[...new Set(storeShifts.map(s=>s.staffId))];
-    const activeStaffs=staffs.filter(s=>activeStaffIds.includes(s.id));
+    // 全スタッフを表示（対応店舗に含まれる or 既にシフトあり）
+    const allStaffIds=[...new Set([
+      ...storeShifts.map(s=>s.staffId),
+      ...staffs.filter(s=>(s.assignedStores||[]).includes(store.id)).map(s=>s.id)
+    ])];
+    const tableStaffs=staffs.filter(s=>allStaffIds.includes(s.id));
 
-    // Day headers
+    // 日ごとの出勤人数カウント
+    const dayCounts={};
+    for(let d=1;d<=days;d++){
+      const date=ds(tblY,tblM,d);
+      dayCounts[date]=storeShifts.filter(s=>s.date===date).length;
+    }
+
+    // Day headers（クリックで手動調整、2人未満は赤背景）
     const dayHeaders=Array.from({length:days},(_,i)=>{
-      const d=i+1, dow=new Date(tblY,tblM-1,d).getDay();
+      const d=i+1, date=ds(tblY,tblM,d);
+      const dow=new Date(tblY,tblM-1,d).getDay();
       const color=dow===0?'color:var(--danger)':dow===6?'color:var(--primary)':'';
-      return `<th style="${color}">${d}<br><span style="font-weight:400">${DAYS[dow]}</span></th>`;
+      const cnt=dayCounts[date]||0;
+      const bg=cnt<2?'background:#fee2e2;':'';
+      const warn=cnt<2?`<div style="font-size:.55rem;color:var(--danger);font-weight:700;">⚠${cnt}人</div>`:'';
+      return `<th style="${color}${bg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')" title="クリックして調整">
+        ${d}<br><span style="font-weight:400">${DAYS[dow]}</span>${warn}
+      </th>`;
     }).join('');
 
-    const rows=activeStaffs.map(staff=>{
+    const rows=tableStaffs.map(staff=>{
       const cells=Array.from({length:days},(_,i)=>{
         const d=i+1, date=ds(tblY,tblM,d);
         const shift=storeShifts.find(s=>s.staffId===staff.id&&s.date===date);
-        if(!shift) return '<td></td>';
-        return `<td><div class="sft-cell">${shift.startTime}<br>${shift.endTime}</div></td>`;
+        const cnt=dayCounts[date]||0;
+        const cellBg=cnt<2&&shift?'background:#fecaca;':cnt<2?'background:#fff5f5;':'';
+        if(!shift) return `<td style="${cellBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')"></td>`;
+        return `<td style="${cellBg}cursor:pointer;" onclick="openAdjustModal('${store.id}','${date}')">
+          <div class="sft-cell">${shift.startTime}<br>${shift.endTime}</div>
+        </td>`;
       }).join('');
       const totalH=storeShifts.filter(s=>s.staffId===staff.id).reduce((sum,s)=>sum+calcH(s.startTime,s.endTime),0);
       return `<tr><td class="sft-name">${staff.name}</td>${cells}<td class="fw6">${totalH.toFixed(1)}h</td></tr>`;
     }).join('');
 
+    // 合計行（日ごとの人数）
+    const totalRow=Array.from({length:days},(_,i)=>{
+      const d=i+1, date=ds(tblY,tblM,d);
+      const cnt=dayCounts[date]||0;
+      const bg=cnt<2?'background:#fee2e2;color:var(--danger);font-weight:700;':'';
+      return `<td style="${bg}text-align:center;font-size:.7rem;">${cnt>0?cnt+'人':''}</td>`;
+    }).join('');
+
     html+=`<div class="card" style="overflow:hidden;">
-      <div class="card-title">${store.name}（${store.openTime}〜${store.closeTime}）</div>
-      ${!activeStaffs.length?'<p class="text-muted text-sm">シフトがありません</p>':`
+      <div class="flex-between mb3">
+        <div class="card-title" style="margin:0;border:0;padding:0">${store.name}（${store.openTime}〜${store.closeTime}）</div>
+        <div class="text-xs text-muted">日付をクリックして手動調整</div>
+      </div>
       <div class="tbl-wrap">
         <table class="sft-table">
           <thead><tr><th class="sft-name">スタッフ</th>${dayHeaders}<th>合計</th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>
+            ${tableStaffs.length?rows:'<tr><td colspan="33" class="text-muted" style="text-align:center;padding:12px;">スタッフなし</td></tr>'}
+            <tr style="background:var(--gray-50);">
+              <td class="sft-name" style="font-size:.72rem;color:var(--gray-500);">出勤人数</td>
+              ${totalRow}
+              <td></td>
+            </tr>
+          </tbody>
         </table>
-      </div>`}
+      </div>
     </div>`;
   }
   if(!html) html='<div class="card"><p class="text-muted text-sm" style="text-align:center;padding:20px;">シフトがありません。先にシフト作成タブで自動作成してください。</p></div>';
   document.getElementById('tblArea').innerHTML=html;
+}
+
+// ==================== 手動調整モーダル ====================
+let _adjStoreId=null, _adjDate=null;
+function openAdjustModal(storeId,date){
+  _adjStoreId=storeId; _adjDate=date;
+  const [y,m,d]=date.split('-');
+  const dow=DAYS[new Date(+y,+m-1,+d).getDay()];
+  document.getElementById('adjModalTitle').textContent=`${m}/${d}(${dow}) シフト調整`;
+  renderAdjModal();
+  document.getElementById('adjModal').classList.remove('hidden');
+}
+function renderAdjModal(){
+  const store=DB.get('stores').find(s=>s.id===_adjStoreId);
+  const staffs=DB.get('staffs').filter(s=>(s.assignedStores||[]).includes(_adjStoreId));
+  const shifts=DB.get('shifts');
+  const dayShifts=shifts.filter(s=>s.storeId===_adjStoreId&&s.date===_adjDate);
+  const avails=DB.get('availabilities').filter(a=>a.date===_adjDate);
+
+  const html=staffs.map(staff=>{
+    const shift=dayShifts.find(s=>s.staffId===staff.id);
+    const avail=avails.find(a=>a.staffId===staff.id);
+    const availTxt=avail?`希望: ${avail.startTime}〜${avail.endTime}`:'希望未登録';
+    if(shift){
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;">
+          <div class="text-sm fw6">${staff.name}</div>
+          <div class="text-xs text-muted">${availTxt}</div>
+        </div>
+        <input type="time" value="${shift.startTime}" id="adj-s-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
+        <span style="font-size:.75rem;">〜</span>
+        <input type="time" value="${shift.endTime}" id="adj-e-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
+        <button class="btn btn-outline btn-sm" onclick="updateAdjShift('${staff.id}','${shift.id}')">更新</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAdjShift('${shift.id}')">削除</button>
+      </div>`;
+    } else {
+      const defS=avail?avail.startTime:(store?store.openTime:'09:00');
+      const defE=avail?avail.endTime:(store?store.closeTime:'17:00');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);flex-wrap:wrap;opacity:.7;">
+        <div style="flex:1;min-width:120px;">
+          <div class="text-sm fw6">${staff.name}</div>
+          <div class="text-xs text-muted">${availTxt}</div>
+        </div>
+        <input type="time" value="${defS}" id="adj-s-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
+        <span style="font-size:.75rem;">〜</span>
+        <input type="time" value="${defE}" id="adj-e-${staff.id}" style="padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
+        <button class="btn btn-primary btn-sm" onclick="addAdjShift('${staff.id}')">追加</button>
+      </div>`;
+    }
+  }).join('');
+
+  const cnt=dayShifts.length;
+  const warn=cnt<2?`<div style="padding:8px 12px;background:#fee2e2;border-radius:6px;color:var(--danger);font-size:.8rem;font-weight:600;margin-bottom:12px;">⚠ 出勤者が${cnt}人です（最低2人必要）</div>`:'';
+  document.getElementById('adjModalBody').innerHTML=warn+(html||'<p class="text-muted text-sm">この店舗に対応スタッフがいません</p>');
+}
+function updateAdjShift(staffId,shiftId){
+  const s=document.getElementById('adj-s-'+staffId).value;
+  const e=document.getElementById('adj-e-'+staffId).value;
+  if(s>=e){alert('終了時間は開始時間より後にしてください');return}
+  let shifts=DB.get('shifts');
+  shifts=shifts.map(x=>x.id===shiftId?{...x,startTime:s,endTime:e}:x);
+  DB.set('shifts',shifts);
+  renderAdjModal(); renderShiftTable();
+}
+function deleteAdjShift(shiftId){
+  if(!confirm('このシフトを削除しますか？')) return;
+  DB.set('shifts',DB.get('shifts').filter(s=>s.id!==shiftId));
+  renderAdjModal(); renderShiftTable();
+}
+function addAdjShift(staffId){
+  const s=document.getElementById('adj-s-'+staffId).value;
+  const e=document.getElementById('adj-e-'+staffId).value;
+  if(s>=e){alert('終了時間は開始時間より後にしてください');return}
+  let shifts=DB.get('shifts');
+  shifts.push({id:uuid(),staffId,storeId:_adjStoreId,date:_adjDate,startTime:s,endTime:e});
+  DB.set('shifts',shifts);
+  renderAdjModal(); renderShiftTable();
 }
 
 // ==================== CALENDAR BUILDER ====================
